@@ -1,0 +1,95 @@
+[
+  {
+    "name": "empty-board candidate is legal",
+    "stones": [],
+    "candidate": {"r": 7, "c": 7},
+    "expected": "LEGAL"
+  },
+  {
+    "name": "black exact-five horizontal win is not forbidden",
+    "stones": [
+      {"r": 7, "c": 3, "color": "BLACK"}, {"r": 0, "c": 0, "color": "WHITE"},
+      {"r": 7, "c": 4, "color": "BLACK"}, {"r": 0, "c": 1, "color": "WHITE"},
+      {"r": 7, "c": 5, "color": "BLACK"}, {"r": 0, "c": 2, "color": "WHITE"},
+      {"r": 7, "c": 6, "color": "BLACK"}
+    ],
+    "candidate": {"r": 7, "c": 7},
+    "expected": "FIVE_WIN"
+  },
+  {
+    "name": "black overline horizontal is forbidden",
+    "stones": [
+      {"r": 7, "c": 2, "color": "BLACK"}, {"r": 0, "c": 0, "color": "WHITE"},
+      {"r": 7, "c": 3, "color": "BLACK"}, {"r": 0, "c": 1, "color": "WHITE"},
+      {"r": 7, "c": 4, "color": "BLACK"}, {"r": 0, "c": 2, "color": "WHITE"},
+      {"r": 7, "c": 5, "color": "BLACK"}, {"r": 0, "c": 3, "color": "WHITE"},
+      {"r": 7, "c": 7, "color": "BLACK"}, {"r": 0, "c": 4, "color": "WHITE"},
+      {"r": 7, "c": 8, "color": "BLACK"}
+    ],
+    "candidate": {"r": 7, "c": 6},
+    "expected": "OVERLINE"
+  },
+  {
+    "name": "black double-three at cross intersection",
+    "stones": [
+      {"r": 7, "c": 5, "color": "BLACK"}, {"r": 0, "c": 0, "color": "WHITE"},
+      {"r": 7, "c": 6, "color": "BLACK"}, {"r": 0, "c": 1, "color": "WHITE"},
+      {"r": 5, "c": 7, "color": "BLACK"}, {"r": 0, "c": 2, "color": "WHITE"},
+      {"r": 6, "c": 7, "color": "BLACK"}
+    ],
+    "candidate": {"r": 7, "c": 7},
+    "expected": "DOUBLE_THREE"
+  },
+  {
+    "name": "black double-four with two closed fours",
+    "stones": [
+      {"r": 3, "c": 7, "color": "WHITE"}, {"r": 0, "c": 0, "color": "BLACK"},
+      {"r": 4, "c": 7, "color": "BLACK"}, {"r": 0, "c": 1, "color": "WHITE"},
+      {"r": 5, "c": 7, "color": "BLACK"}, {"r": 0, "c": 2, "color": "WHITE"},
+      {"r": 6, "c": 7, "color": "BLACK"}, {"r": 0, "c": 3, "color": "WHITE"},
+      {"r": 7, "c": 3, "color": "WHITE"}, {"r": 0, "c": 4, "color": "BLACK"},
+      {"r": 7, "c": 4, "color": "BLACK"}, {"r": 0, "c": 5, "color": "WHITE"},
+      {"r": 7, "c": 5, "color": "BLACK"}, {"r": 0, "c": 6, "color": "WHITE"},
+      {"r": 7, "c": 6, "color": "BLACK"}
+    ],
+    "candidate": {"r": 7, "c": 7},
+    "expected": "DOUBLE_FOUR"
+  },
+  {
+    "name": "black five-trumps-overline: exact-five diagonal wins even with horizontal overline shape",
+    "stones": [
+      {"r": 7, "c": 4, "color": "BLACK"}, {"r": 0, "c": 0, "color": "WHITE"},
+      {"r": 7, "c": 5, "color": "BLACK"}, {"r": 0, "c": 1, "color": "WHITE"},
+      {"r": 7, "c": 6, "color": "BLACK"}, {"r": 0, "c": 2, "color": "WHITE"},
+      {"r": 7, "c": 8, "color": "BLACK"}, {"r": 0, "c": 3, "color": "WHITE"},
+      {"r": 7, "c": 9, "color": "BLACK"}, {"r": 0, "c": 4, "color": "WHITE"},
+      {"r": 5, "c": 5, "color": "BLACK"}, {"r": 0, "c": 5, "color": "WHITE"},
+      {"r": 6, "c": 6, "color": "BLACK"}, {"r": 0, "c": 6, "color": "WHITE"},
+      {"r": 8, "c": 8, "color": "BLACK"}, {"r": 0, "c": 7, "color": "WHITE"},
+      {"r": 9, "c": 9, "color": "BLACK"}
+    ],
+    "candidate": {"r": 7, "c": 7},
+    "expected": "FIVE_WIN"
+  },
+  {
+    "name": "black single open three is legal",
+    "stones": [
+      {"r": 7, "c": 6, "color": "BLACK"}, {"r": 0, "c": 0, "color": "WHITE"},
+      {"r": 7, "c": 7, "color": "BLACK"}
+    ],
+    "candidate": {"r": 7, "c": 8},
+    "expected": "LEGAL"
+  },
+  {
+    "name": "white at 3-3 spot is fine (no Renju restriction for white)",
+    "stones": [
+      {"r": 7, "c": 5, "color": "WHITE"}, {"r": 0, "c": 0, "color": "BLACK"},
+      {"r": 7, "c": 6, "color": "WHITE"}, {"r": 0, "c": 1, "color": "BLACK"},
+      {"r": 5, "c": 7, "color": "WHITE"}, {"r": 0, "c": 2, "color": "BLACK"},
+      {"r": 6, "c": 7, "color": "WHITE"}
+    ],
+    "candidate": {"r": 7, "c": 7},
+    "candidate_color": "WHITE",
+    "expected": "LEGAL"
+  }
+]

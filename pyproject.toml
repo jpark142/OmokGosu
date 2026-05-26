@@ -1,0 +1,24 @@
+[build-system]
+requires = ["scikit-build-core>=0.9", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "omok_core"
+version = "0.1.0"
+description = "C++ core engine for OmokGosu (Renju rules + Board + AI search), exposed via pybind11"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "OmokGosu" }
+]
+license = { text = "Proprietary" }
+
+[tool.scikit-build]
+minimum-version = "0.9"
+cmake.version = ">=3.26"
+build-dir = "build/{wheel_tag}"
+wheel.packages = []  # pure extension module, no Python package
+
+[tool.scikit-build.cmake.define]
+OMOK_BUILD_TESTS = "OFF"
+OMOK_BUILD_PYBIND = "ON"

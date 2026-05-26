@@ -1,0 +1,72 @@
+# Build artifacts
+/build/
+/dist/
+*.pyd
+*.so
+*.dylib
+*.dll
+*.o
+*.obj
+*.lib
+*.exp
+*.exe
+*.pdb
+*.ilk
+*.idb
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+cmake-build-*/
+compile_commands.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+_skbuild/
+
+# Node / web
+node_modules/
+.next/
+.cache/
+.vite/
+.parcel-cache/
+web/dist/
+web/build/
+
+# Editor / IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs / runtime
+*.log
+*.pid
+*.seed
+*.pid.lock
+logs/
+
+# ML
+models/champion/*.pt
+models/champion/*.pth
+models/candidates/*.pt
+models/candidates/*.pth
+training/runs/
+training/replay_buffer/
+wandb/
