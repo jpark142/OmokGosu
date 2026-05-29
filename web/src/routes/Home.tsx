@@ -3,15 +3,21 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { createGame } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { AIDifficulty, AILevel, GameMode } from "@/types/protocol";
 
 export default function Home() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<GameMode>("hvh");
+  const { user, logout } = useAuth();
+  const [mode, setMode] = useState<GameMode>("hva");
   const [aiLevel, setAiLevel] = useState<AILevel>("minimax");
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>("medium");
-  const [playerName, setPlayerName] = useState("Player");
   const [busy, setBusy] = useState(false);
+
+  const winRate =
+    user && user.wins + user.losses > 0
+      ? `${Math.round((user.wins / (user.wins + user.losses)) * 100)}%`
+      : "—";
 
   const onStart = async () => {
     setBusy(true);
@@ -21,7 +27,6 @@ export default function Home() {
         ai_level: mode === "hva" ? aiLevel : undefined,
         ai_difficulty:
           mode === "hva" && aiLevel === "minimax" ? aiDifficulty : undefined,
-        player_name: playerName,
       });
       navigate(`/game/${res.game_id}`);
     } catch (e) {
@@ -35,22 +40,37 @@ export default function Home() {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-stone-900">OmokGosu</h1>
-          <p className="text-sm text-stone-500 mt-1">
-            한국식 렌주룰 오목 · 5분 + 10초 byo-yomi × 3
-          </p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-stone-900">OmokGosu</h1>
+            <p className="text-sm text-stone-500 mt-1">
+              한국식 렌주룰 오목 · 5분 + 10초 byo-yomi × 3
+            </p>
+          </div>
+          <button
+            onClick={logout}
+            className="text-xs text-stone-500 hover:text-stone-900"
+          >
+            로그아웃
+          </button>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-stone-700">플레이어 이름</label>
-          <input
-            type="text"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            className="w-full px-3 py-2 border border-stone-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-400"
-          />
-        </div>
+        {user && (
+          <div className="rounded-md border border-stone-200 bg-stone-50 p-3 flex justify-between items-center">
+            <div>
+              <div className="text-xs text-stone-500">로그인</div>
+              <div className="font-medium">{user.username}</div>
+            </div>
+            <div className="text-right text-sm">
+              <div className="text-stone-700">
+                <span className="text-green-600 font-medium">{user.wins}승</span>
+                {" · "}
+                <span className="text-red-600 font-medium">{user.losses}패</span>
+              </div>
+              <div className="text-xs text-stone-500">승률 {winRate}</div>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-stone-700">모드</label>
@@ -63,7 +83,7 @@ export default function Home() {
                   : "bg-white text-stone-700 border-stone-300"
               }`}
             >
-              사람 vs 사람
+              혼자 (양쪽)
             </button>
             <button
               onClick={() => setMode("hva")}
@@ -76,6 +96,11 @@ export default function Home() {
               사람 vs AI
             </button>
           </div>
+          {mode === "hvh" && (
+            <p className="text-xs text-stone-500">
+              방 시스템(Phase 3B 예정)이 들어가기 전 임시 모드 — 한 명이 양쪽을 둡니다.
+            </p>
+          )}
         </div>
 
         {mode === "hva" && (

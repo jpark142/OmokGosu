@@ -1,15 +1,23 @@
-"""REST endpoints for game creation / lookup / resign / rematch."""
+"""REST endpoints for game creation / lookup / resign / rematch.
+
+Phase 3A: `POST /api/games` requires auth and tags the human side with the
+caller's user_id. HVH mode is still allowed for now (Phase 3B will move HVH
+behind the room flow); HVA records the caller's stats on game end.
+"""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException
+
+from omok_server.auth.deps import get_current_user
+from omok_server.db.models import User
 from omok_server.game.manager import manager
 from omok_server.game.session import GameSession
 from omok_server.schemas import (
     ColorStr,
     CreateGameRequest,
     CreateGameResponse,
-    GameMode,
     SStateMsg,
 )
 
@@ -22,18 +30,39 @@ async def health() -> dict[str, bool]:
 
 
 @router.post("/games", response_model=CreateGameResponse)
-async def create_game(req: CreateGameRequest) -> CreateGameResponse:
-    ai_name: str | None = None
-    if req.ai_level is not None:
-        ai_name = req.ai_level.value
-        # Difficulty only applies to search-based AIs (minimax for now).
-        if req.ai_difficulty and req.ai_level.value == "minimax":
-            ai_name = f"{ai_name}:{req.ai_difficulty.lower()}"
-    session = GameSession.new(
-        mode=req.mode,
-        human_name=req.player_name or "Player",
-        ai_name=ai_name,
-    )
+async def create_game(
+    req: CreateGameRequest,
+    user: Annotated[User, Depends(get_current_user)],
+) -> CreateGameResponse:
+    """Create a game.
+
+    - HVA: the caller plays one color, AI fills the other.
+    - HVH: the caller plays BOTH colors from this endpoint (solo / two-tab self-play).
+      Multi-user HVH goes through the room flow in Phase 3B; this path is kept
+      for solo testing and as the temporary entry point until rooms ship.
+    """
+    from omok_server.schemas import GameMode
+
+    if req.mode == GameMode.HVH:
+        session = GameSession.new(
+            mode=req.mode,
+            human_name=req.player_name or user.username,
+            human_user_id=user.id,
+            guest_name=user.username,
+            guest_user_id=user.id,
+        )
+    else:
+        ai_name: str | None = None
+        if req.ai_level is not None:
+            ai_name = req.ai_level.value
+            if req.ai_difficulty and req.ai_level.value == "minimax":
+                ai_name = f"{ai_name}:{req.ai_difficulty.lower()}"
+        session = GameSession.new(
+            mode=req.mode,
+            human_name=req.player_name or user.username,
+            ai_name=ai_name,
+            human_user_id=user.id,
+        )
     await manager.add(session)
     return CreateGameResponse(
         game_id=session.game_id,
@@ -43,7 +72,10 @@ async def create_game(req: CreateGameRequest) -> CreateGameResponse:
 
 
 @router.get("/games/{game_id}", response_model=SStateMsg)
-async def get_game(game_id: str) -> SStateMsg:
+async def get_game(
+    game_id: str,
+    user: Annotated[User, Depends(get_current_user)],
+) -> SStateMsg:
     s = manager.get(game_id)
     if s is None:
         raise HTTPException(status_code=404, detail="game not found")
@@ -51,7 +83,11 @@ async def get_game(game_id: str) -> SStateMsg:
 
 
 @router.post("/games/{game_id}/resign")
-async def resign(game_id: str, color: ColorStr) -> dict[str, bool]:
+async def resign(
+    game_id: str,
+    color: ColorStr,
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict[str, bool]:
     s = manager.get(game_id)
     if s is None:
         raise HTTPException(status_code=404, detail="game not found")
@@ -61,16 +97,17 @@ async def resign(game_id: str, color: ColorStr) -> dict[str, bool]:
 
 
 @router.post("/games/{game_id}/rematch", response_model=CreateGameResponse)
-async def rematch(game_id: str) -> CreateGameResponse:
+async def rematch(
+    game_id: str,
+    user: Annotated[User, Depends(get_current_user)],
+) -> CreateGameResponse:
     old = manager.get(game_id)
     if old is None:
         raise HTTPException(status_code=404, detail="game not found")
     new_session = GameSession.new(
         mode=old.mode,
-        human_name=next(
-            (p.name for p in old.players.values() if p.kind.value == "human"),
-            "Player",
-        ),
+        human_name=user.username,
+        human_user_id=user.id,
     )
     await manager.add(new_session)
     return CreateGameResponse(

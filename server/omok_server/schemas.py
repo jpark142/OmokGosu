@@ -77,6 +77,9 @@ class MovePayload(BaseModel):
 class PlayerInfo(BaseModel):
     name: str
     kind: PlayerKind
+    user_id: int | None = None  # NULL for AI (or pre-Phase-3A sessions)
+    wins: int | None = None     # populated by session.to_state_msg via DB lookup
+    losses: int | None = None
 
 
 class ClockSnapshot(BaseModel):
@@ -99,6 +102,43 @@ class CreateGameRequest(BaseModel):
     ai_level: AILevel | None = None
     ai_difficulty: str | None = None  # "easy" | "medium" | "hard" — only used by Minimax+ AIs
     player_name: str | None = None
+
+
+# ---------- Auth (Phase 3A) ----------
+
+
+class UserSummary(BaseModel):
+    id: int
+    username: str
+    wins: int
+    losses: int
+
+    @property
+    def games_played(self) -> int:
+        return self.wins + self.losses
+
+    @property
+    def win_rate(self) -> float:
+        return 0.0 if self.games_played == 0 else self.wins / self.games_played
+
+
+class AuthCredentials(BaseModel):
+    username: str = Field(min_length=2, max_length=24)
+    password: str = Field(min_length=4, max_length=128)
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    user: UserSummary
+
+
+# Optional realtime nudge: server can include this alongside SGameOverMsg so
+# clients refresh their cached wins/losses without an extra REST call.
+class StatsUpdate(BaseModel):
+    user_id: int
+    wins: int
+    losses: int
 
 
 class CreateGameResponse(BaseModel):
@@ -167,6 +207,8 @@ class SGameOverMsg(BaseModel):
     type: Literal["game_over"] = "game_over"
     winner: ColorStr | None = None  # None for draw (currently unused)
     reason: GameOverReason
+    stats_updates: list[StatsUpdate] = Field(default_factory=list)
+    back_to_room: str | None = None  # populated in Phase 3B if the game was room-hosted
 
 
 class SErrorMsg(BaseModel):

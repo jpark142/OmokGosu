@@ -1,7 +1,8 @@
 """WebSocket endpoint: real-time game state + move submission + timer ticks.
 
-One WS connection per browser tab. A `GameSession` can have multiple WS
-connections (multi-tab spectating / two-tab HVH). Broadcasts are per-session.
+Auth: WS connections must carry `?token=<jwt>`; failure → close(4401).
+Game-over: the first emitter of SGameOverMsg also calls `services.stats.record_match`
+within the session lock so the Match row + user stats are written exactly once.
 """
 from __future__ import annotations
 
@@ -9,25 +10,25 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from omok_server.auth.deps import get_current_user_ws
 from omok_server.game.manager import manager
 from omok_server.game.session import GameSession
 from omok_server.schemas import (
     ClocksSnapshot,
     ColorStr,
+    ForbiddenReason,
     GameOverReason,
-    PlayerKind,
     SErrorMsg,
     SForbiddenRejectedMsg,
     SGameOverMsg,
     SMoveAppliedMsg,
     SPongMsg,
-    SStateMsg,
     STimerTickMsg,
 )
+from omok_server.services.stats import record_match
 
 router = APIRouter()
 
@@ -53,7 +54,6 @@ def _bus_for(game_id: str) -> SessionBus:
 
 
 async def _send_json(ws: WebSocket, payload) -> None:
-    """Send a Pydantic model (or dict) as JSON, ignoring closed connections."""
     try:
         if hasattr(payload, "model_dump"):
             data = payload.model_dump()
@@ -86,6 +86,21 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def _emit_game_over_msg(session: GameSession, fallback_reason: GameOverReason) -> SGameOverMsg:
+    """Build the SGameOverMsg payload and run record_match exactly once.
+
+    Caller must hold `session.lock`. Safe to call multiple times — only the
+    first call persists; subsequent calls return an empty stats_updates list.
+    """
+    reason = session.over_reason or fallback_reason
+    stats_updates = []
+    if not session.recorded_match:
+        result = record_match(session, session.started_at)
+        session.recorded_match = True
+        stats_updates = result.stats_updates
+    return SGameOverMsg(winner=session.winner, reason=reason, stats_updates=stats_updates)
+
+
 async def _broadcast_move_and_state(session: GameSession, game_id: str) -> None:
     move = session.engine.last_move()
     if move is not None:
@@ -99,27 +114,17 @@ async def _broadcast_move_and_state(session: GameSession, game_id: str) -> None:
         )
     await _broadcast(game_id, session.to_state_msg())
     if session.is_over():
-        await _broadcast(
-            game_id,
-            SGameOverMsg(
-                winner=session.winner,
-                reason=session.over_reason or GameOverReason.FIVE,
-            ),
-        )
+        await _broadcast(game_id, _emit_game_over_msg(session, GameOverReason.FIVE))
 
 
 async def _play_ai_turns(session: GameSession, game_id: str) -> None:
     """While the side-to-move is an AI player, have it play one move at a time.
-
-    Caller must hold `session.lock`.
-    """
+    Caller must hold `session.lock`."""
     while not session.is_over():
         color = session.engine.side_to_move
         ai = session.get_ai_for(color)
         if ai is None:
             return
-        # Small UX delay so the human sees their own move before the AI's appears,
-        # and the AI's clock visibly consumes some time.
         await asyncio.sleep(0.4)
         r, c = ai.choose_move(session.engine, color, budget_ms=800)
         reason = session.apply_move(r, c, color)
@@ -147,10 +152,7 @@ async def _start_ticker_if_needed(session: GameSession) -> None:
                         if timed_out is not None:
                             await _broadcast(
                                 session.game_id,
-                                SGameOverMsg(
-                                    winner=session.winner,
-                                    reason=GameOverReason.TIMEOUT,
-                                ),
+                                _emit_game_over_msg(session, GameOverReason.TIMEOUT),
                             )
                         await _broadcast(session.game_id, session.to_state_msg())
                         return
@@ -171,20 +173,30 @@ async def _start_ticker_if_needed(session: GameSession) -> None:
 
 @router.websocket("/ws/games/{game_id}")
 async def game_ws(ws: WebSocket, game_id: str):
+    # Token validation first — closes the socket on failure.
+    user = await get_current_user_ws(ws)
+    if user is None:
+        return
+
     session = manager.get(game_id)
     if session is None:
         await ws.close(code=4404)
         return
 
+    # Authorization: this user must be a participant. AI games allow only the
+    # one human participant. HVH games allow either user_id assigned to the session.
+    participant_ids = {info.user_id for info in session.players.values() if info.user_id is not None}
+    if participant_ids and user.id not in participant_ids:
+        await ws.close(code=4403)
+        return
+
     await ws.accept()
     bus = _bus_for(game_id)
     bus.sockets.add(ws)
-    # Send initial state snapshot.
     await _send_json(ws, session.to_state_msg())
     await _start_ticker_if_needed(session)
 
-    # If the side-to-move is an AI (e.g. BLACK is AI at game start, or we reconnected
-    # during an AI's think), play it now. No-op when the human is to move.
+    # If side-to-move is an AI (e.g. reconnect during an AI think), play now.
     async with session.lock:
         if not session.is_over():
             await _play_ai_turns(session, game_id)
@@ -203,8 +215,6 @@ async def game_ws(ws: WebSocket, game_id: str):
                 await _send_json(ws, SPongMsg())
                 continue
             if mtype == "resign":
-                # The resigning player is whoever's turn it is from this socket's view.
-                # In HVH on two tabs we accept resignation from either side: client passes color.
                 color_str = msg.get("color")
                 try:
                     color = ColorStr(color_str) if color_str else session.engine.side_to_move
@@ -212,10 +222,8 @@ async def game_ws(ws: WebSocket, game_id: str):
                     color = session.engine.side_to_move
                 async with session.lock:
                     session.resign(color)
-                await _broadcast(
-                    game_id,
-                    SGameOverMsg(winner=session.winner, reason=GameOverReason.RESIGN),
-                )
+                    over_msg = _emit_game_over_msg(session, GameOverReason.RESIGN)
+                await _broadcast(game_id, over_msg)
                 await _broadcast(game_id, session.to_state_msg())
                 continue
             if mtype == "move":
@@ -226,15 +234,21 @@ async def game_ws(ws: WebSocket, game_id: str):
                     continue
                 async with session.lock:
                     color_to_play = session.engine.side_to_move
-                    reason = session.apply_move(r, c, color_to_play)
-                    if reason is not None:
+                    # Authorization: the WS user must own the color about to play
+                    # (or be the human in an HVA game). If user_id is set on the
+                    # side-to-move slot, only that user may move.
+                    info = session.players.get(color_to_play)
+                    if info is not None and info.user_id is not None and info.user_id != user.id:
                         await _send_json(
                             ws,
-                            SForbiddenRejectedMsg(r=r, c=c, reason=reason),
+                            SForbiddenRejectedMsg(r=r, c=c, reason=ForbiddenReason.NOT_YOUR_TURN),
                         )
                         continue
+                    reason = session.apply_move(r, c, color_to_play)
+                    if reason is not None:
+                        await _send_json(ws, SForbiddenRejectedMsg(r=r, c=c, reason=reason))
+                        continue
                     await _broadcast_move_and_state(session, game_id)
-                    # If the next side is an AI, play its move(s) before unlocking.
                     await _play_ai_turns(session, game_id)
                 continue
 

@@ -70,6 +70,27 @@ class GameClock:
             return max(0, s.main_ms - elapsed)
         return max(0, s.byoyomi_ms - elapsed)
 
+    @staticmethod
+    def _consume_byoyomi(s: "ClockSide", elapsed_in_byoyomi: int) -> None:
+        """Apply Japanese-style byo-yomi consumption for a single move.
+
+        Rules: with N periods of P seconds and elapsed time T in byo-yomi,
+          T ≤ P             → 0 periods consumed (period refreshes next turn).
+          k*P < T ≤ (k+1)*P → k periods consumed (1 ≤ k ≤ N-1).
+          T > N*P           → all N consumed + flag timed_out.
+        """
+        P = s.byoyomi_ms
+        if P <= 0 or elapsed_in_byoyomi <= P:
+            # Free refresh (Japanese rule): finishing within one period costs nothing.
+            return
+        # ceil(T / P) − 1 = number of periods *used up* by this turn beyond the first.
+        consumed = (elapsed_in_byoyomi - 1) // P
+        if consumed >= s.byoyomi_periods:
+            s.byoyomi_periods = 0
+            s.timed_out = True
+        else:
+            s.byoyomi_periods -= consumed
+
     def apply_move(self) -> None:
         """Consume time used during the active side's turn and stop the clock.
 
@@ -88,31 +109,10 @@ class GameClock:
                 overflow = elapsed - s.main_ms
                 s.main_ms = 0
                 s.in_byoyomi = True
-                # Each full byo-yomi period covers `byoyomi_ms`. The current move overflows
-                # into successive periods. If overflow fits in one period, the player keeps
-                # all their periods (the period resets next turn). If overflow exceeds a period,
-                # one period is consumed per `byoyomi_ms` of overflow beyond the first.
-                while overflow > s.byoyomi_ms and s.byoyomi_periods > 0:
-                    s.byoyomi_periods -= 1
-                    overflow -= s.byoyomi_ms
-                if overflow > s.byoyomi_ms:
-                    # Ran out of periods entirely.
-                    s.byoyomi_periods = 0
-                    s.timed_out = True
-                # else: still has remaining periods, next turn starts in byo-yomi mode with full period.
+                self._consume_byoyomi(s, overflow)
         else:
             # Already in byo-yomi. If we moved within the period, refresh (Japanese style).
-            if elapsed <= s.byoyomi_ms:
-                # Period refreshed; no period consumed.
-                pass
-            else:
-                # Used more than one period. Consume floor(elapsed / byoyomi_ms) extras.
-                consumed = (elapsed // s.byoyomi_ms)
-                if consumed >= s.byoyomi_periods:
-                    s.byoyomi_periods = 0
-                    s.timed_out = True
-                else:
-                    s.byoyomi_periods -= consumed
+            self._consume_byoyomi(s, elapsed)
 
         self.active = None
         self.turn_started_at_ms = None

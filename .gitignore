@@ -62,6 +62,12 @@ desktop.ini
 *.pid.lock
 logs/
 
+# OmokGosu runtime data (SQLite)
+server/data/
+*.sqlite
+*.sqlite-journal
+*.db
+
 # ML
 models/champion/*.pt
 models/champion/*.pth

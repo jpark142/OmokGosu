@@ -1,23 +1,14 @@
+import { http } from "@/lib/fetcher";
 import type {
   CreateGameRequest,
   CreateGameResponse,
   SStateMsg,
 } from "@/types/protocol";
 
-const BASE = ""; // Vite proxies /api → :8000 in dev.
-
-export async function createGame(req: CreateGameRequest): Promise<CreateGameResponse> {
-  const r = await fetch(`${BASE}/api/games`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  if (!r.ok) throw new Error(`createGame failed: ${r.status}`);
-  return r.json();
+export function createGame(req: CreateGameRequest): Promise<CreateGameResponse> {
+  return http.post<CreateGameResponse>("/api/games", req as unknown as Record<string, unknown>);
 }
 
-export async function getGame(gameId: string): Promise<SStateMsg> {
-  const r = await fetch(`${BASE}/api/games/${gameId}`);
-  if (!r.ok) throw new Error(`getGame failed: ${r.status}`);
-  return r.json();
+export function getGame(gameId: string): Promise<SStateMsg> {
+  return http.get<SStateMsg>(`/api/games/${gameId}`);
 }

@@ -9,6 +9,7 @@ import random
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from omok_server.game.clock import GameClock, now_monotonic_ms
 from omok_server.game.engine import Engine
@@ -37,28 +38,50 @@ class GameSession:
     over_reason: GameOverReason | None = None
     winner: ColorStr | None = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    started_at: datetime = field(default_factory=datetime.utcnow)
+    recorded_match: bool = False  # set True after services.stats.record_match runs
 
     @staticmethod
     def new(
         mode: GameMode = GameMode.HVH,
         human_name: str = "Player",
         ai_name: str | None = None,
+        human_user_id: int | None = None,
+        guest_name: str | None = None,
+        guest_user_id: int | None = None,
     ) -> "GameSession":
+        """Create a new session.
+
+        - HVH (방 → 게임): pass both `human_*` (host) and `guest_*` (guest).
+        - HVA (Home → 게임): pass `human_*` only; AI fills the other slot.
+
+        Backwards-compatible: legacy callers that omit the new fields still
+        produce a valid session, but with `user_id=None` everywhere — stats
+        won't record. New code should pass user IDs.
+        """
         gid = uuid.uuid4().hex[:12]
         gs = GameSession(game_id=gid, mode=mode)
-        # Randomly assign which color the requesting human plays.
-        # In HVH this just labels the slots; in HVA it determines who plays the AI.
         human_color = random.choice([ColorStr.BLACK, ColorStr.WHITE])
         opp_color = ColorStr.WHITE if human_color == ColorStr.BLACK else ColorStr.BLACK
         if mode == GameMode.HVH:
             gs.players = {
-                human_color: PlayerInfo(name=human_name, kind=PlayerKind.HUMAN),
-                opp_color: PlayerInfo(name="Player 2", kind=PlayerKind.HUMAN),
+                human_color: PlayerInfo(
+                    name=human_name, kind=PlayerKind.HUMAN, user_id=human_user_id
+                ),
+                opp_color: PlayerInfo(
+                    name=guest_name or "Player 2",
+                    kind=PlayerKind.HUMAN,
+                    user_id=guest_user_id,
+                ),
             }
         else:
             gs.players = {
-                human_color: PlayerInfo(name=human_name, kind=PlayerKind.HUMAN),
-                opp_color: PlayerInfo(name=ai_name or "AI", kind=PlayerKind.AI),
+                human_color: PlayerInfo(
+                    name=human_name, kind=PlayerKind.HUMAN, user_id=human_user_id
+                ),
+                opp_color: PlayerInfo(
+                    name=ai_name or "AI", kind=PlayerKind.AI, user_id=None
+                ),
             }
         gs.clock.start_turn(ColorStr.BLACK)
         return gs
@@ -97,6 +120,23 @@ class GameSession:
         return self.status == GameStatus.OVER
 
     def to_state_msg(self) -> SStateMsg:
+        # Hydrate player stats from DB on each snapshot. Cheap: at most 2 rows.
+        # Lazy import to avoid circular dependency (services.stats imports GameSession).
+        from omok_server.services.stats import fetch_user_stats
+
+        user_ids = [info.user_id for info in self.players.values() if info.user_id is not None]
+        stats_map = fetch_user_stats(user_ids) if user_ids else {}
+
+        hydrated: dict[ColorStr, PlayerInfo] = {}
+        for color, info in self.players.items():
+            wins_losses = stats_map.get(info.user_id) if info.user_id is not None else None
+            if wins_losses is not None:
+                hydrated[color] = info.model_copy(
+                    update={"wins": wins_losses[0], "losses": wins_losses[1]}
+                )
+            else:
+                hydrated[color] = info
+
         return SStateMsg(
             game_id=self.game_id,
             stones=self.engine.stones(),
@@ -110,7 +150,7 @@ class GameSession:
                 black=self.clock.live_snapshot_for(ColorStr.BLACK),
                 white=self.clock.live_snapshot_for(ColorStr.WHITE),
             ),
-            players={c: info for c, info in self.players.items()},
+            players=hydrated,
             status=self.status,
             server_time_ms=int(time.time() * 1000),
         )

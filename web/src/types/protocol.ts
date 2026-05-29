@@ -24,6 +24,35 @@ export interface Stone {
 export interface PlayerInfo {
   name: string;
   kind: PlayerKind;
+  user_id?: number | null;
+  wins?: number | null;
+  losses?: number | null;
+}
+
+// ---------- Auth (Phase 3A) ----------
+
+export interface UserSummary {
+  id: number;
+  username: string;
+  wins: number;
+  losses: number;
+}
+
+export interface AuthCredentials {
+  username: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: "bearer";
+  user: UserSummary;
+}
+
+export interface StatsUpdate {
+  user_id: number;
+  wins: number;
+  losses: number;
 }
 
 export interface ClockSnapshot {
@@ -97,6 +126,8 @@ export interface SGameOverMsg {
   type: "game_over";
   winner: ColorStr | null;
   reason: GameOverReason;
+  stats_updates?: StatsUpdate[];
+  back_to_room?: string | null;
 }
 
 export interface SErrorMsg {

@@ -5,7 +5,13 @@ import { toast } from "sonner";
 import Board from "@/components/Board";
 import Clock from "@/components/Clock";
 import { useGameSocket } from "@/hooks/useGameSocket";
-import type { ColorStr, ForbiddenReason, GameOverReason } from "@/types/protocol";
+import { useAuth } from "@/lib/auth";
+import type {
+  ColorStr,
+  ForbiddenReason,
+  GameOverReason,
+  PlayerInfo,
+} from "@/types/protocol";
 
 const FORBIDDEN_LABEL: Record<ForbiddenReason, string> = {
   DOUBLE_THREE: "금수: 삼삼 (3-3)",
@@ -24,9 +30,27 @@ const REASON_LABEL: Record<GameOverReason, string> = {
   TIMEOUT: "시간패",
 };
 
+function PlayerLine({ info }: { info: PlayerInfo | undefined }) {
+  if (!info) return <span className="text-stone-400">—</span>;
+  const stats =
+    info.wins !== undefined && info.wins !== null && info.losses !== undefined && info.losses !== null
+      ? `${info.wins}승 ${info.losses}패`
+      : null;
+  return (
+    <div>
+      <div className="text-xs uppercase text-stone-500">
+        {info.kind === "ai" ? "AI" : "Player"}
+      </div>
+      <div className="font-medium">{info.name}</div>
+      {stats && <div className="text-xs text-stone-500">{stats}</div>}
+    </div>
+  );
+}
+
 export default function Game() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
+  const { user, applyStats } = useAuth();
   const { state, connected, send, onMessage } = useGameSocket(gameId);
   const [gameOver, setGameOver] = useState<{ winner: ColorStr | null; reason: GameOverReason } | null>(
     null,
@@ -38,12 +62,17 @@ export default function Game() {
         toast.error(FORBIDDEN_LABEL[msg.reason]);
       } else if (msg.type === "game_over") {
         setGameOver({ winner: msg.winner, reason: msg.reason });
+        // Refresh local user stats from the broadcast (saves a /me round-trip).
+        if (user && msg.stats_updates) {
+          const mine = msg.stats_updates.find((s) => s.user_id === user.id);
+          if (mine) applyStats(mine.wins, mine.losses);
+        }
       } else if (msg.type === "error") {
         toast.error(msg.message);
       }
     });
     return unsub;
-  }, [onMessage]);
+  }, [onMessage, user, applyStats]);
 
   const onPlay = (r: number, c: number) => {
     if (!state || state.status === "OVER") return;
@@ -101,12 +130,7 @@ export default function Game() {
               <>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center bg-white rounded-md border border-stone-200 p-3">
-                    <div>
-                      <div className="text-xs uppercase text-stone-500">
-                        {whitePlayer?.kind === "ai" ? "AI" : "Player"}
-                      </div>
-                      <div className="font-medium">{whitePlayer?.name ?? "—"}</div>
-                    </div>
+                    <PlayerLine info={whitePlayer} />
                     <Clock
                       color="WHITE"
                       snap={state.clocks.white}
@@ -115,12 +139,7 @@ export default function Game() {
                     />
                   </div>
                   <div className="flex justify-between items-center bg-white rounded-md border border-stone-200 p-3">
-                    <div>
-                      <div className="text-xs uppercase text-stone-500">
-                        {blackPlayer?.kind === "ai" ? "AI" : "Player"}
-                      </div>
-                      <div className="font-medium">{blackPlayer?.name ?? "—"}</div>
-                    </div>
+                    <PlayerLine info={blackPlayer} />
                     <Clock
                       color="BLACK"
                       snap={state.clocks.black}

@@ -8,6 +8,9 @@ dependencies = [
     "uvicorn[standard]>=0.27",
     "pydantic>=2.6",
     "websockets>=12.0",
+    "sqlmodel>=0.0.16",
+    "bcrypt>=4.0",
+    "pyjwt>=2.8",
 ]
 # Note: `omok_core` (the C++ pybind11 module) is installed separately by
 # scripts/bootstrap.ps1 via the top-level pyproject.toml. It's not on PyPI.

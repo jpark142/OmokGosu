@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { getToken } from "@/lib/fetcher";
 import type { ClientMsg, ServerMsg, SStateMsg } from "@/types/protocol";
 
 export interface GameSocketState {
@@ -22,7 +23,9 @@ export function useGameSocket(gameId: string | undefined): GameSocketState {
 
     const connect = () => {
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const url = `${proto}://${location.host}/ws/games/${gameId}`;
+      const token = getToken() ?? "";
+      const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+      const url = `${proto}://${location.host}/ws/games/${gameId}${qs}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
@@ -41,9 +44,12 @@ export function useGameSocket(gameId: string | undefined): GameSocketState {
           /* ignore */
         }
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         if (cancelled) return;
         setConnected(false);
+        // 4401 = auth failure: don't retry, AuthProvider will redirect on next render.
+        // 4403 = forbidden, 4404 = game not found — also don't retry.
+        if (ev.code === 4401 || ev.code === 4403 || ev.code === 4404) return;
         setTimeout(connect, backoff);
         backoff = Math.min(backoff * 2, 8000);
       };
