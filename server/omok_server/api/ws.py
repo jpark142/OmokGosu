@@ -13,8 +13,12 @@ from dataclasses import dataclass, field
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from sqlmodel import Session
+
 from omok_server.auth.deps import get_current_user_ws
+from omok_server.db.engine import engine
 from omok_server.game.manager import manager
+from omok_server.game.room_manager import room_manager
 from omok_server.game.session import GameSession
 from omok_server.schemas import (
     ClocksSnapshot,
@@ -86,19 +90,44 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def _emit_game_over_msg(session: GameSession, fallback_reason: GameOverReason) -> SGameOverMsg:
+async def _emit_game_over_msg(session: GameSession, fallback_reason: GameOverReason) -> SGameOverMsg:
     """Build the SGameOverMsg payload and run record_match exactly once.
 
     Caller must hold `session.lock`. Safe to call multiple times — only the
-    first call persists; subsequent calls return an empty stats_updates list.
+    first call persists and triggers room/lobby side-effects; subsequent calls
+    just return the payload (empty stats_updates, no broadcasts).
     """
     reason = session.over_reason or fallback_reason
     stats_updates = []
+    back_to_room: str | None = None
     if not session.recorded_match:
         result = record_match(session, session.started_at)
         session.recorded_match = True
         stats_updates = result.stats_updates
-    return SGameOverMsg(winner=session.winner, reason=reason, stats_updates=stats_updates)
+        # If this game was hosted by a Room, transition the room back to LOBBY
+        # and push the new state to room + lobby subscribers. Lock order
+        # discipline: this is called while holding session.lock, and we only
+        # acquire room locks inside room_manager (game.lock → room.lock).
+        room_id = room_manager.find_by_game(session.game_id)
+        if room_id is not None:
+            updated_room = await room_manager.handle_game_over(room_id)
+            back_to_room = room_id
+            if updated_room is not None:
+                # Lazy imports to avoid module-load circularity with api/rooms.py.
+                from omok_server.api.rooms import room_to_detail, room_to_summary
+
+                with Session(engine) as db:
+                    detail = room_to_detail(updated_room, db).model_dump()
+                    summary = room_to_summary(updated_room, db).model_dump()
+                await room_manager.broadcast_room(room_id, {"type": "room_state", "room": detail})
+                await room_manager.broadcast_lobby({
+                    "type": "lobby_update", "action": "updated",
+                    "room_id": room_id, "room": summary,
+                })
+    return SGameOverMsg(
+        winner=session.winner, reason=reason,
+        stats_updates=stats_updates, back_to_room=back_to_room,
+    )
 
 
 async def _broadcast_move_and_state(session: GameSession, game_id: str) -> None:
@@ -114,7 +143,7 @@ async def _broadcast_move_and_state(session: GameSession, game_id: str) -> None:
         )
     await _broadcast(game_id, session.to_state_msg())
     if session.is_over():
-        await _broadcast(game_id, _emit_game_over_msg(session, GameOverReason.FIVE))
+        await _broadcast(game_id, await _emit_game_over_msg(session, GameOverReason.FIVE))
 
 
 async def _play_ai_turns(session: GameSession, game_id: str) -> None:
@@ -152,7 +181,7 @@ async def _start_ticker_if_needed(session: GameSession) -> None:
                         if timed_out is not None:
                             await _broadcast(
                                 session.game_id,
-                                _emit_game_over_msg(session, GameOverReason.TIMEOUT),
+                                await _emit_game_over_msg(session, GameOverReason.TIMEOUT),
                             )
                         await _broadcast(session.game_id, session.to_state_msg())
                         return
@@ -222,7 +251,7 @@ async def game_ws(ws: WebSocket, game_id: str):
                     color = session.engine.side_to_move
                 async with session.lock:
                     session.resign(color)
-                    over_msg = _emit_game_over_msg(session, GameOverReason.RESIGN)
+                    over_msg = await _emit_game_over_msg(session, GameOverReason.RESIGN)
                 await _broadcast(game_id, over_msg)
                 await _broadcast(game_id, session.to_state_msg())
                 continue

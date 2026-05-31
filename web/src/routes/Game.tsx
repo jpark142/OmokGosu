@@ -52,17 +52,23 @@ export default function Game() {
   const navigate = useNavigate();
   const { user, applyStats } = useAuth();
   const { state, connected, send, onMessage } = useGameSocket(gameId);
-  const [gameOver, setGameOver] = useState<{ winner: ColorStr | null; reason: GameOverReason } | null>(
-    null,
-  );
+  const [gameOver, setGameOver] = useState<{
+    winner: ColorStr | null;
+    reason: GameOverReason;
+    backToRoom: string | null;
+  } | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   useEffect(() => {
     const unsub = onMessage((msg) => {
       if (msg.type === "forbidden_move_rejected") {
         toast.error(FORBIDDEN_LABEL[msg.reason]);
       } else if (msg.type === "game_over") {
-        setGameOver({ winner: msg.winner, reason: msg.reason });
-        // Refresh local user stats from the broadcast (saves a /me round-trip).
+        setGameOver({
+          winner: msg.winner,
+          reason: msg.reason,
+          backToRoom: msg.back_to_room ?? null,
+        });
         if (user && msg.stats_updates) {
           const mine = msg.stats_updates.find((s) => s.user_id === user.id);
           if (mine) applyStats(mine.wins, mine.losses);
@@ -74,22 +80,64 @@ export default function Game() {
     return unsub;
   }, [onMessage, user, applyStats]);
 
+  // If the game was hosted by a room, auto-return after 5s.
+  useEffect(() => {
+    if (!gameOver?.backToRoom) return;
+    setCountdown(5);
+    const target = gameOver.backToRoom;
+    const tickId = window.setInterval(() => {
+      setCountdown((c) => {
+        if (c === null) return null;
+        if (c <= 1) {
+          window.clearInterval(tickId);
+          navigate(`/rooms/${target}`);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(tickId);
+  }, [gameOver, navigate]);
+
+  const blackPlayer = state?.players.BLACK;
+  const whitePlayer = state?.players.WHITE;
+
+  // Which color is "me"? In HVH, the user matches whichever player slot has
+  // their user_id. In HVA, the user is the human player (the only non-AI slot).
+  // In legacy/solo HVH where both slots share user_id, we let them play both.
+  const myColor: ColorStr | "BOTH" | null = useMemo(() => {
+    if (!user || !state) return null;
+    const blackIsMe = blackPlayer?.user_id === user.id;
+    const whiteIsMe = whitePlayer?.user_id === user.id;
+    if (blackIsMe && whiteIsMe) return "BOTH";
+    if (blackIsMe) return "BLACK";
+    if (whiteIsMe) return "WHITE";
+    return null;
+  }, [user, state, blackPlayer, whitePlayer]);
+
+  const lastMove = state?.last_move ?? null;
+  const forbidden = state?.forbidden_squares ?? [];
+  const toMove = state?.to_move ?? "BLACK";
+  const myTurn =
+    myColor !== null && (myColor === "BOTH" || myColor === toMove);
+  const disabled = !state || state.status === "OVER" || !connected || !myTurn;
+
   const onPlay = (r: number, c: number) => {
     if (!state || state.status === "OVER") return;
+    if (!myTurn) {
+      toast.error("상대 차례입니다");
+      return;
+    }
     send({ type: "move", r, c });
   };
 
   const onResign = () => {
-    if (!state) return;
-    send({ type: "resign", color: state.to_move });
+    if (!state || !myColor || myColor === "BOTH") {
+      if (state) send({ type: "resign", color: state.to_move });
+      return;
+    }
+    send({ type: "resign", color: myColor });
   };
-
-  const blackPlayer = state?.players.BLACK;
-  const whitePlayer = state?.players.WHITE;
-  const lastMove = state?.last_move ?? null;
-  const forbidden = state?.forbidden_squares ?? [];
-  const toMove = state?.to_move ?? "BLACK";
-  const disabled = !state || state.status === "OVER" || !connected;
 
   const winnerText = useMemo(() => {
     if (!gameOver) return null;
@@ -119,7 +167,9 @@ export default function Game() {
               lastMove={lastMove}
               forbiddenSquares={forbidden}
               toMove={toMove}
-              hoverColor={state && state.status !== "OVER" ? toMove : null}
+              hoverColor={
+                state && state.status !== "OVER" && myTurn ? toMove : null
+              }
               disabled={disabled}
               onPlay={onPlay}
             />
@@ -154,6 +204,16 @@ export default function Game() {
                   <div className="font-mono text-lg">
                     {state.move_number} · {state.to_move === "BLACK" ? "흑" : "백"} 차례
                   </div>
+                  {myColor && myColor !== "BOTH" && (
+                    <div className="text-xs text-stone-500 mt-1">
+                      내 색: {myColor === "BLACK" ? "흑" : "백"}{" "}
+                      {myTurn ? (
+                        <span className="text-green-600">(내 차례)</span>
+                      ) : (
+                        <span className="text-stone-400">(대기)</span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <button
@@ -176,13 +236,27 @@ export default function Game() {
             <div className="text-lg text-stone-700 mb-4">
               {winnerText} · {REASON_LABEL[gameOver.reason]}
             </div>
+            {gameOver.backToRoom && countdown !== null && (
+              <div className="text-sm text-stone-500 mb-4">
+                {countdown}초 후 방으로 돌아갑니다.
+              </div>
+            )}
             <div className="flex gap-2">
-              <button
-                onClick={() => navigate("/")}
-                className="flex-1 py-2 bg-stone-900 text-white rounded"
-              >
-                홈으로
-              </button>
+              {gameOver.backToRoom ? (
+                <button
+                  onClick={() => navigate(`/rooms/${gameOver.backToRoom}`)}
+                  className="flex-1 py-2 bg-stone-900 text-white rounded"
+                >
+                  방으로 돌아가기
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate("/lobby")}
+                  className="flex-1 py-2 bg-stone-900 text-white rounded"
+                >
+                  로비로
+                </button>
+              )}
             </div>
           </div>
         </div>

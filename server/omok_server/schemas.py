@@ -141,6 +141,94 @@ class StatsUpdate(BaseModel):
     losses: int
 
 
+# ---------- Rooms (Phase 3B) ----------
+
+
+class RoomStatusStr(str, Enum):
+    LOBBY = "LOBBY"
+    PLAYING = "PLAYING"
+
+
+class RoomMemberSummary(BaseModel):
+    """Summary of one user as seen from inside a room (host or guest slot)."""
+    user_id: int
+    username: str
+    wins: int
+    losses: int
+
+
+class RoomSummary(BaseModel):
+    """Compact list-view row used by the lobby."""
+    room_id: str
+    title: str
+    has_password: bool
+    host: RoomMemberSummary
+    guest: RoomMemberSummary | None
+    status: RoomStatusStr
+    created_at: float
+
+
+class RoomDetail(RoomSummary):
+    """Room state from inside the room (members + readiness)."""
+    guest_ready: bool
+    current_game_id: str | None = None
+
+
+class CreateRoomReq(BaseModel):
+    title: str = Field(min_length=1, max_length=40)
+    password: str | None = Field(default=None, max_length=64)
+
+
+class JoinRoomReq(BaseModel):
+    password: str | None = Field(default=None, max_length=64)
+
+
+# ----- Room WS messages -----
+
+
+class CRoomReadyMsg(BaseModel):
+    type: Literal["ready"] = "ready"
+    value: bool
+
+
+class CRoomStartMsg(BaseModel):
+    type: Literal["start"] = "start"
+
+
+class CRoomLeaveMsg(BaseModel):
+    type: Literal["leave"] = "leave"
+
+
+class SRoomStateMsg(BaseModel):
+    type: Literal["room_state"] = "room_state"
+    room: RoomDetail
+
+
+class SRoomGameStartedMsg(BaseModel):
+    type: Literal["room_game_started"] = "room_game_started"
+    game_id: str
+
+
+class SRoomClosedMsg(BaseModel):
+    type: Literal["room_closed"] = "room_closed"
+    reason: Literal["host_left", "kicked"] = "host_left"
+
+
+# ----- Lobby WS messages -----
+
+
+class SLobbySnapshotMsg(BaseModel):
+    type: Literal["lobby_snapshot"] = "lobby_snapshot"
+    rooms: list[RoomSummary]
+
+
+class SLobbyUpdateMsg(BaseModel):
+    type: Literal["lobby_update"] = "lobby_update"
+    action: Literal["created", "updated", "removed"]
+    room_id: str
+    room: RoomSummary | None = None  # null when action == "removed"
+
+
 class CreateGameResponse(BaseModel):
     game_id: str
     your_color: ColorStr

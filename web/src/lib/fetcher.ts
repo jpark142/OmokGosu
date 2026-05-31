@@ -1,16 +1,20 @@
 // Thin fetch wrapper that injects the JWT and unwraps JSON / errors uniformly.
-// Reads the token directly from localStorage so it stays in sync after login/
-// logout without prop drilling.
+//
+// Token storage: sessionStorage (per-tab) so multiple browser windows can log
+// in as different users — critical for local multi-user testing. Trade-off:
+// closing the tab clears the login. localStorage (shared across all tabs of
+// one origin) was tried first but caused the "second login silently kicked
+// the first" bug.
 
 const TOKEN_KEY = "omok_token";
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return sessionStorage.getItem(TOKEN_KEY);
 }
 
 export function setToken(token: string | null): void {
-  if (token === null) localStorage.removeItem(TOKEN_KEY);
-  else localStorage.setItem(TOKEN_KEY, token);
+  if (token === null) sessionStorage.removeItem(TOKEN_KEY);
+  else sessionStorage.setItem(TOKEN_KEY, token);
 }
 
 export class HttpError extends Error {

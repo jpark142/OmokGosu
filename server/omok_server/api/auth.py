@@ -54,3 +54,16 @@ def login(
 @router.get("/me", response_model=UserSummary)
 def me(user: Annotated[User, Depends(get_current_user)]) -> UserSummary:
     return _to_summary(user)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> None:
+    """Stateless JWT — there's no server-side session to invalidate. The point
+    of this endpoint is to leave all rooms the user is currently in so logging
+    out also deletes any room they host."""
+    from omok_server.api.rooms import leave_all_rooms_for_user
+
+    await leave_all_rooms_for_user(user.id, db=session)

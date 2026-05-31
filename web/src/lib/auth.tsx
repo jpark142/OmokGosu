@@ -14,7 +14,7 @@ interface AuthValue {
   initializing: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
   applyStats: (wins: number, losses: number) => void;
 }
@@ -65,6 +65,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("omok:unauthorized", onUnauthorized);
   }, []);
 
+  // Cleanup on tab close / refresh / navigation away: leave any rooms the user
+  // is in so closing the browser as the host actually deletes the room
+  // (instead of stranding an orphan that nobody can reach). fetch+keepalive
+  // survives unload and carries the Authorization header.
+  useEffect(() => {
+    const onUnload = () => {
+      const tok = getToken();
+      if (!tok) return;
+      try {
+        fetch("/api/rooms/leave-all", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${tok}` },
+          keepalive: true,
+        });
+      } catch {
+        /* unload — nothing to do */
+      }
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, []);
+
   const login = useCallback(async (username: string, password: string) => {
     try {
       const res = await http.post<AuthResponse>("/api/auth/login", { username, password });
@@ -94,7 +116,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Server-side: leave any rooms the user is in (deletes host rooms).
+    // If it fails (network, etc.), still log out locally so the user isn't
+    // stranded — orphaned rooms are recoverable next session.
+    try {
+      await http.post("/api/auth/logout");
+    } catch {
+      /* ignore — log out client-side regardless */
+    }
     setToken(null);
     setTokenState(null);
     setUser(null);

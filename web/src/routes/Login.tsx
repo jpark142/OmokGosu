@@ -41,6 +41,9 @@ export default function Login() {
         <div>
           <h1 className="text-3xl font-bold text-stone-900">OmokGosu</h1>
           <p className="text-sm text-stone-500 mt-1">한국식 렌주룰 오목</p>
+          <p className="text-xs text-stone-400 mt-2">
+            세션은 탭 단위입니다. 다른 계정으로 테스트하려면 새 창을 여세요.
+          </p>
         </div>
 
         <div className="flex border-b border-stone-200">

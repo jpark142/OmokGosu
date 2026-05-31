@@ -55,6 +55,67 @@ export interface StatsUpdate {
   losses: number;
 }
 
+// ---------- Rooms (Phase 3B) ----------
+
+export type RoomStatusStr = "LOBBY" | "PLAYING";
+
+export interface RoomMemberSummary {
+  user_id: number;
+  username: string;
+  wins: number;
+  losses: number;
+}
+
+export interface RoomSummary {
+  room_id: string;
+  title: string;
+  has_password: boolean;
+  host: RoomMemberSummary;
+  guest: RoomMemberSummary | null;
+  status: RoomStatusStr;
+  created_at: number;
+}
+
+export interface RoomDetail extends RoomSummary {
+  guest_ready: boolean;
+  current_game_id: string | null;
+}
+
+export interface CreateRoomReq {
+  title: string;
+  password?: string | null;
+}
+
+export interface JoinRoomReq {
+  password?: string | null;
+}
+
+// Room WS (client → server)
+export type ClientRoomMsg =
+  | { type: "ready"; value: boolean }
+  | { type: "start" }
+  | { type: "leave" }
+  | { type: "ping" };
+
+// Room WS (server → client)
+export type ServerRoomMsg =
+  | { type: "room_state"; room: RoomDetail }
+  | { type: "room_game_started"; game_id: string }
+  | { type: "room_closed"; reason: "host_left" | "kicked" }
+  | { type: "error"; message: string }
+  | { type: "pong" };
+
+// Lobby WS (server → client only — client just keepalive pings)
+export type ServerLobbyMsg =
+  | { type: "lobby_snapshot"; rooms: RoomSummary[] }
+  | {
+      type: "lobby_update";
+      action: "created" | "updated" | "removed";
+      room_id: string;
+      room: RoomSummary | null;
+    }
+  | { type: "pong" };
+
 export interface ClockSnapshot {
   main_ms: number;
   byoyomi_periods: number;
