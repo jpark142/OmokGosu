@@ -10,6 +10,7 @@ listing N users in the lobby doesn't fan out to N COUNT queries. The atomic
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterable
@@ -26,6 +27,14 @@ from omok_server.schemas import (
     PlayerKind,
     StatsUpdate,
 )
+
+
+def _serialize_moves(session: GameSession) -> str:
+    """JSON-serialize the played moves in order. Each entry: {r, c, color}."""
+    moves = []
+    for stone in session.engine.stones():
+        moves.append({"r": stone.r, "c": stone.c, "color": stone.color.value})
+    return json.dumps(moves, separators=(",", ":"))
 
 
 @dataclass(frozen=True)
@@ -81,6 +90,7 @@ def record_match(session: GameSession, started_at: datetime) -> MatchResult:
         ended_at=ended_at,
         move_count=session.engine.move_number,
         is_ai_game=is_ai,
+        moves_json=_serialize_moves(session),
     )
 
     updates: list[StatsUpdate] = []

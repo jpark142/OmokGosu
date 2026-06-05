@@ -36,11 +36,33 @@ engine = create_engine(
 
 
 def init_db() -> None:
-    """Create tables if missing. Idempotent."""
+    """Create tables if missing. Idempotent.
+
+    Also runs lightweight inline migrations for additive schema changes —
+    SQLModel.metadata.create_all doesn't ALTER existing tables, so columns
+    added in later releases need an explicit ADD COLUMN here.
+    """
     # Import side-effect: register all SQLModel tables on the metadata.
     from omok_server.db import models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
+    _run_inline_migrations()
+
+
+def _run_inline_migrations() -> None:
+    """ADD COLUMN for fields introduced after the initial schema.
+
+    Idempotent — each migration is gated by a `PRAGMA table_info` check so
+    re-running is a no-op once the column exists.
+    """
+    with engine.connect() as conn:
+        from sqlalchemy import text
+        cols = {row[1] for row in conn.execute(text("PRAGMA table_info('match')"))}
+        if "moves_json" not in cols:
+            conn.execute(text(
+                "ALTER TABLE match ADD COLUMN moves_json TEXT NOT NULL DEFAULT '[]'"
+            ))
+            conn.commit()
 
 
 def get_session() -> Session:

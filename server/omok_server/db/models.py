@@ -27,3 +27,8 @@ class Match(SQLModel, table=True):
     ended_at: datetime = Field(default_factory=datetime.utcnow)
     move_count: int = 0
     is_ai_game: bool = False
+    # JSON-serialized list of {"r":int, "c":int, "color":"BLACK"|"WHITE"} in
+    # play order. Populated on game end so the replay viewer can scrub through
+    # moves without reconstructing them. Empty string for matches predating
+    # this field.
+    moves_json: str = Field(default="[]")

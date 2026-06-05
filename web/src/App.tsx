@@ -7,6 +7,7 @@ import { VersionProvider } from "@/lib/versionContext";
 import Game from "@/routes/Game";
 import Lobby from "@/routes/Lobby";
 import Login from "@/routes/Login";
+import MatchReplay from "@/routes/MatchReplay";
 import Room from "@/routes/Room";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/lobby" element={<Protected><Lobby /></Protected>} />
           <Route path="/rooms/:roomId" element={<Protected><Room /></Protected>} />
           <Route path="/game/:gameId" element={<Protected><Game /></Protected>} />
+          <Route path="/matches/:matchId" element={<Protected><MatchReplay /></Protected>} />
         </Routes>
       </AuthProvider>
       <UpgradeModal />

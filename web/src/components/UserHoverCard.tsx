@@ -3,6 +3,7 @@
 // network call until the first hover, and the result is cached per mount.
 
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { getRecentMatches } from "@/lib/api";
 import type { GameOverReason, MatchSummary } from "@/types/protocol";
@@ -105,31 +106,37 @@ export default function UserHoverCard({ userId, children }: Props) {
           {!loading && !error && matches !== null && matches.length > 0 && (
             <ul className="space-y-1.5">
               {matches.map((m) => (
-                <li key={m.match_id} className="text-xs flex items-center gap-2">
-                  <span
-                    className={`inline-block w-1 h-4 rounded ${
-                      m.you_won ? "bg-green-500" : "bg-red-400"
-                    }`}
-                  />
-                  <span
-                    className={`font-semibold w-7 ${
-                      m.you_won ? "text-green-700" : "text-red-600"
-                    }`}
+                <li key={m.match_id}>
+                  <Link
+                    to={`/matches/${m.match_id}`}
+                    className="text-xs flex items-center gap-2 hover:bg-stone-50 rounded px-1 py-0.5 -mx-1"
+                    title="기보 다시 보기"
                   >
-                    {m.you_won ? "승" : "패"}
-                  </span>
-                  <span className="text-stone-700 truncate flex-1">
-                    {m.is_ai_game
-                      ? "AI"
-                      : (m.opponent_username ?? "(탈퇴한 유저)")}
-                    <span className="text-stone-400 ml-1">
-                      · {m.your_color === "BLACK" ? "흑" : "백"}
+                    <span
+                      className={`inline-block w-1 h-4 rounded ${
+                        m.you_won ? "bg-green-500" : "bg-red-400"
+                      }`}
+                    />
+                    <span
+                      className={`font-semibold w-7 ${
+                        m.you_won ? "text-green-700" : "text-red-600"
+                      }`}
+                    >
+                      {m.you_won ? "승" : "패"}
                     </span>
-                  </span>
-                  <span className="text-stone-400 whitespace-nowrap">
-                    {OVER_REASON_LABEL[m.over_reason]} ·{" "}
-                    {formatRelative(now - m.ended_at)}
-                  </span>
+                    <span className="text-stone-700 truncate flex-1">
+                      {m.is_ai_game
+                        ? "AI"
+                        : (m.opponent_username ?? "(탈퇴한 유저)")}
+                      <span className="text-stone-400 ml-1">
+                        · {m.your_color === "BLACK" ? "흑" : "백"}
+                      </span>
+                    </span>
+                    <span className="text-stone-400 whitespace-nowrap">
+                      {OVER_REASON_LABEL[m.over_reason]} ·{" "}
+                      {formatRelative(now - m.ended_at)}
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>

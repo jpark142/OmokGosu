@@ -136,6 +136,21 @@ class MatchSummary(BaseModel):
     move_count: int
 
 
+class MatchDetail(BaseModel):
+    """Full match payload for the replay viewer."""
+    match_id: int
+    game_id: str
+    black_username: str | None
+    white_username: str | None
+    winner_color: ColorStr | None  # None when AI won (no human winner_user_id)
+    over_reason: GameOverReason
+    is_ai_game: bool
+    started_at: float
+    ended_at: float
+    move_count: int
+    moves: list[Stone]  # in play order, alternating BLACK/WHITE
+
+
 class RecentMatches(BaseModel):
     user_id: int
     matches: list[MatchSummary]
@@ -317,6 +332,7 @@ class SGameOverMsg(BaseModel):
     reason: GameOverReason
     stats_updates: list[StatsUpdate] = Field(default_factory=list)
     back_to_room: str | None = None  # populated in Phase 3B if the game was room-hosted
+    match_id: int | None = None  # DB Match row id — frontend uses this to deep-link the replay
 
 
 class SErrorMsg(BaseModel):

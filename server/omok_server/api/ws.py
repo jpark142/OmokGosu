@@ -103,6 +103,7 @@ async def _emit_game_over_msg(session: GameSession, fallback_reason: GameOverRea
     if not session.recorded_match:
         result = record_match(session, session.started_at)
         session.recorded_match = True
+        session.recorded_match_id = result.match_id
         stats_updates = result.stats_updates
         # If this game was hosted by a Room, transition the room back to LOBBY
         # and push the new state to room + lobby subscribers. Lock order
@@ -127,6 +128,7 @@ async def _emit_game_over_msg(session: GameSession, fallback_reason: GameOverRea
     return SGameOverMsg(
         winner=session.winner, reason=reason,
         stats_updates=stats_updates, back_to_room=back_to_room,
+        match_id=session.recorded_match_id,
     )
 
 

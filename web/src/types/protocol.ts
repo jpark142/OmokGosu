@@ -56,6 +56,20 @@ export interface RecentMatches {
   matches: MatchSummary[];
 }
 
+export interface MatchDetail {
+  match_id: number;
+  game_id: string;
+  black_username: string | null;
+  white_username: string | null;
+  winner_color: ColorStr | null;
+  over_reason: GameOverReason;
+  is_ai_game: boolean;
+  started_at: number;
+  ended_at: number;
+  move_count: number;
+  moves: Stone[];
+}
+
 export interface AuthCredentials {
   username: string;
   password: string;
@@ -208,6 +222,7 @@ export interface SGameOverMsg {
   reason: GameOverReason;
   stats_updates?: StatsUpdate[];
   back_to_room?: string | null;
+  match_id?: number | null;
 }
 
 export interface SErrorMsg {

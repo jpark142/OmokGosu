@@ -40,6 +40,7 @@ class GameSession:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     started_at: datetime = field(default_factory=datetime.utcnow)
     recorded_match: bool = False  # set True after services.stats.record_match runs
+    recorded_match_id: int | None = None  # the DB id from record_match (for replay link)
 
     @staticmethod
     def new(

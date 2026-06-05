@@ -4,6 +4,7 @@ import type {
   CreateGameResponse,
   CreateRoomReq,
   JoinRoomReq,
+  MatchDetail,
   RecentMatches,
   RoomDetail,
   RoomSummary,
@@ -42,4 +43,8 @@ export function leaveRoom(id: string): Promise<void> {
 
 export function getRecentMatches(userId: number, limit = 5): Promise<RecentMatches> {
   return http.get<RecentMatches>(`/api/users/${userId}/recent-matches?limit=${limit}`);
+}
+
+export function getMatch(matchId: number): Promise<MatchDetail> {
+  return http.get<MatchDetail>(`/api/matches/${matchId}`);
 }

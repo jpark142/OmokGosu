@@ -56,6 +56,7 @@ export default function Game() {
     winner: ColorStr | null;
     reason: GameOverReason;
     backToRoom: string | null;
+    matchId: number | null;
   } | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
 
@@ -68,6 +69,7 @@ export default function Game() {
           winner: msg.winner,
           reason: msg.reason,
           backToRoom: msg.back_to_room ?? null,
+          matchId: msg.match_id ?? null,
         });
         if (user && msg.stats_updates) {
           const mine = msg.stats_updates.find((s) => s.user_id === user.id);
@@ -241,20 +243,28 @@ export default function Game() {
                 {countdown}초 후 방으로 돌아갑니다.
               </div>
             )}
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2">
               {gameOver.backToRoom ? (
                 <button
                   onClick={() => navigate(`/rooms/${gameOver.backToRoom}`)}
-                  className="flex-1 py-2 bg-stone-900 text-white rounded"
+                  className="py-2 bg-stone-900 text-white rounded"
                 >
                   방으로 돌아가기
                 </button>
               ) : (
                 <button
                   onClick={() => navigate("/lobby")}
-                  className="flex-1 py-2 bg-stone-900 text-white rounded"
+                  className="py-2 bg-stone-900 text-white rounded"
                 >
                   로비로
+                </button>
+              )}
+              {gameOver.matchId !== null && (
+                <button
+                  onClick={() => navigate(`/matches/${gameOver.matchId}`)}
+                  className="py-2 border border-stone-300 text-stone-700 rounded hover:bg-stone-50"
+                >
+                  기보 다시 보기
                 </button>
               )}
             </div>
