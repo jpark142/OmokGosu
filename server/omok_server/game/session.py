@@ -113,6 +113,10 @@ class GameSession:
             from omok_server.ai.minimax_ai import MinimaxAI
             suffix = level.split(":", 1)[1] if ":" in level else None
             return MinimaxAI(difficulty=suffix)
+        if level.startswith("heuristic"):
+            from omok_server.ai.heuristic_ai import HeuristicAI
+            suffix = level.split(":", 1)[1] if ":" in level else None
+            return HeuristicAI(difficulty=suffix)
         from omok_server.ai.smart_ai import SmartAI
         return SmartAI()
 

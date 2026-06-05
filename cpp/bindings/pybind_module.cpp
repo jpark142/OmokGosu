@@ -6,6 +6,7 @@
 #include "omok/rules.hpp"
 #include "omok/search.hpp"
 #include "omok/types.hpp"
+#include "omok/vcf.hpp"
 
 namespace py = pybind11;
 using namespace omok;
@@ -133,4 +134,21 @@ PYBIND11_MODULE(omok_core, m) {
              },
              py::arg("board"), py::arg("to_move"), py::arg("rules"), py::arg("limits"),
              "Run iterative-deepening alpha-beta and return the SearchResult.");
+
+    // VCF — searches for a forced win using only moves that create fours.
+    // Returns a tuple (found: bool, sequence: list[(r,c)], nodes: int).
+    m.def("find_vcf",
+          [](Board& b, Color color, int max_depth) {
+              py::gil_scoped_release release;
+              auto r = vcf::find_vcf(b, color, max_depth);
+              py::gil_scoped_acquire acquire;
+              std::vector<std::pair<int, int>> seq;
+              seq.reserve(r.sequence.size());
+              for (const auto& m : r.sequence) seq.emplace_back(m.r, m.c);
+              return py::make_tuple(r.found, seq, r.nodes);
+          },
+          py::arg("board"), py::arg("color"), py::arg("max_depth") = 16,
+          "Search for a Victory-by-Continuous-Fours sequence. Returns "
+          "(found, [(r,c), ...], nodes). The sequence alternates own/opp/own/... "
+          "ending on the move that completes 5-in-a-row.");
 }

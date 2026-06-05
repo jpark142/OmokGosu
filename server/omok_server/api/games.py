@@ -55,7 +55,7 @@ async def create_game(
         ai_name: str | None = None
         if req.ai_level is not None:
             ai_name = req.ai_level.value
-            if req.ai_difficulty and req.ai_level.value == "minimax":
+            if req.ai_difficulty and req.ai_level.value in ("minimax", "heuristic"):
                 ai_name = f"{ai_name}:{req.ai_difficulty.lower()}"
         session = GameSession.new(
             mode=req.mode,

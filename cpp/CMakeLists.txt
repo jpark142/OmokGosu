@@ -9,6 +9,7 @@ add_library(omok_engine STATIC
     src/eval.cpp
     src/movegen.cpp
     src/search.cpp
+    src/vcf.cpp
 )
 target_include_directories(omok_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set_target_properties(omok_engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -38,6 +39,7 @@ if(OMOK_BUILD_TESTS)
         tests/test_pattern.cpp
         tests/test_rules.cpp
         tests/test_search.cpp
+        tests/test_vcf.cpp
     )
     target_link_libraries(omok_tests PRIVATE omok_engine doctest::doctest)
     target_compile_definitions(omok_tests PRIVATE
