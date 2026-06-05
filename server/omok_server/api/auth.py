@@ -19,8 +19,19 @@ from omok_server.schemas import AuthCredentials, AuthResponse, UserSummary
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _to_summary(u: User) -> UserSummary:
-    return UserSummary(id=u.id, username=u.username, wins=u.wins, losses=u.losses)
+def _to_summary(u: User, current_room_id: str | None = None) -> UserSummary:
+    return UserSummary(
+        id=u.id,
+        username=u.username,
+        wins=u.wins,
+        losses=u.losses,
+        current_room_id=current_room_id,
+    )
+
+
+def _summary_with_room(u: User) -> UserSummary:
+    from omok_server.game.room_manager import room_manager
+    return _to_summary(u, current_room_id=room_manager.find_room_for_user(u.id))
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
@@ -35,7 +46,7 @@ def register(
     session.add(user)
     session.commit()
     session.refresh(user)
-    return AuthResponse(access_token=create_access_token(user.id), user=_to_summary(user))
+    return AuthResponse(access_token=create_access_token(user.id), user=_summary_with_room(user))
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -48,12 +59,12 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid username or password"
         )
-    return AuthResponse(access_token=create_access_token(user.id), user=_to_summary(user))
+    return AuthResponse(access_token=create_access_token(user.id), user=_summary_with_room(user))
 
 
 @router.get("/me", response_model=UserSummary)
 def me(user: Annotated[User, Depends(get_current_user)]) -> UserSummary:
-    return _to_summary(user)
+    return _summary_with_room(user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

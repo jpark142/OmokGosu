@@ -1,0 +1,42 @@
+{
+  "name": "omokgosu-electron",
+  "version": "1.0.0",
+  "description": "OmokGosu desktop client (thin Electron shell around the web app).",
+  "private": true,
+  "main": "main.cjs",
+  "author": "OmokGosu",
+  "license": "Proprietary",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64",
+    "dist:dir": "electron-builder --win --x64 --dir"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.omokgosu.desktop",
+    "productName": "OmokGosu",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OmokGosu"
+    }
+  }
+}

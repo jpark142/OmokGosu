@@ -22,6 +22,7 @@ export default function Lobby() {
   const [createOpen, setCreateOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
 
   const winRate =
     user && user.wins + user.losses > 0
@@ -91,7 +92,10 @@ export default function Lobby() {
     }
   };
 
-  const visibleRooms = [...rooms].sort((a, b) => b.created_at - a.created_at);
+  const q = query.trim().toLowerCase();
+  const visibleRooms = [...rooms]
+    .filter((r) => q === "" || r.title.toLowerCase().includes(q))
+    .sort((a, b) => b.created_at - a.created_at);
 
   return (
     <div className="min-h-screen p-4 md:p-6 bg-stone-50">
@@ -142,11 +146,24 @@ export default function Lobby() {
           </button>
         </div>
 
+        {/* Search */}
+        {rooms.length > 0 && (
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="방 제목으로 검색..."
+            className="w-full px-3 py-2 border border-stone-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm"
+          />
+        )}
+
         {/* Room list */}
         <div className="space-y-2">
           {visibleRooms.length === 0 ? (
             <div className="bg-white rounded-md border border-dashed border-stone-300 p-8 text-center text-stone-500">
-              아직 방이 없습니다. 첫 번째 방을 만들어 보세요.
+              {rooms.length === 0
+                ? "아직 방이 없습니다. 첫 번째 방을 만들어 보세요."
+                : `'${query}' 와 일치하는 방이 없습니다.`}
             </div>
           ) : (
             visibleRooms.map((r) => (

@@ -1,8 +1,9 @@
 // AuthProvider: holds the current user and the login/logout/register flow.
 // Token persists in localStorage; the actual REST roundtrips live in fetcher.ts.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { getToken, http, HttpError, setToken } from "@/lib/fetcher";
@@ -25,6 +26,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserSummary | null>(null);
   const [token, setTokenState] = useState<string | null>(getToken());
   const [initializing, setInitializing] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const bootRedirectDone = useRef(false);
 
   // On boot: if we have a token, validate it by fetching /me. If 401, drop.
   useEffect(() => {
@@ -64,6 +68,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener("omok:unauthorized", onUnauthorized);
     return () => window.removeEventListener("omok:unauthorized", onUnauthorized);
   }, []);
+
+  // Auto-resume: on first render after /me resolves, if the user is in a room,
+  // jump them back to it. Only runs once — afterwards the user navigates freely
+  // (e.g. they can go to /lobby and look around without being snapped back).
+  useEffect(() => {
+    if (initializing) return;
+    if (bootRedirectDone.current) return;
+    bootRedirectDone.current = true;
+    const roomId = user?.current_room_id;
+    if (!roomId) return;
+    // Only redirect from typical landing pages; if the user deep-linked
+    // somewhere specific (e.g. /game/:id), respect that.
+    const here = location.pathname;
+    if (here === "/" || here === "/lobby" || here === "/login") {
+      navigate(`/rooms/${roomId}`, { replace: true });
+    }
+  }, [initializing, user, navigate, location.pathname]);
 
   // Cleanup on tab close / refresh / navigation away: leave any rooms the user
   // is in so closing the browser as the host actually deletes the room

@@ -59,3 +59,31 @@ def test_me_rejects_garbage_token(client) -> None:
 def test_register_validates_short_password(client) -> None:
     r = client.post("/api/auth/register", json={"username": _u(), "password": "ab"})
     assert r.status_code == 422  # Pydantic min_length=4
+
+
+def test_me_returns_current_room_id(client) -> None:
+    r = client.post("/api/auth/register", json={"username": _u(), "password": "pw1234"})
+    tok = r.json()["access_token"]
+    hdr = {"Authorization": f"Bearer {tok}"}
+
+    # No room yet → null.
+    assert client.get("/api/auth/me", headers=hdr).json()["current_room_id"] is None
+
+    # Create a room → /me reports it.
+    rid = client.post("/api/rooms", json={"title": "in-progress"}, headers=hdr).json()["room_id"]
+    assert client.get("/api/auth/me", headers=hdr).json()["current_room_id"] == rid
+
+    # Leave → back to null.
+    client.post(f"/api/rooms/{rid}/leave", headers=hdr)
+    assert client.get("/api/auth/me", headers=hdr).json()["current_room_id"] is None
+
+
+def test_login_returns_current_room_id(client) -> None:
+    username = _u()
+    r = client.post("/api/auth/register", json={"username": username, "password": "pw1234"})
+    tok = r.json()["access_token"]
+    rid = client.post("/api/rooms", json={"title": "x"}, headers={"Authorization": f"Bearer {tok}"}).json()["room_id"]
+
+    # Login again — should surface the existing room.
+    r2 = client.post("/api/auth/login", json={"username": username, "password": "pw1234"})
+    assert r2.json()["user"]["current_room_id"] == rid

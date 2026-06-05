@@ -143,13 +143,24 @@ class RoomManager:
             return None
         async with room.lock:
             game_id = room.current_game_id
+            was_playing = room.status == RoomStatus.PLAYING
             room.status = RoomStatus.LOBBY
             room.current_game_id = None
             room.guest_ready = False
+            if was_playing:
+                room.games_played += 1
         if game_id is not None:
             async with self._lock:
                 self._game_to_room.pop(game_id, None)
         return room
+
+    def find_room_for_user(self, user_id: int) -> str | None:
+        """Return the room_id the user is currently a member of (host or guest),
+        or None. Used by /api/auth/me to support auto-resume on refresh."""
+        for room in self._rooms.values():
+            if room.host_user_id == user_id or room.guest_user_id == user_id:
+                return room.room_id
+        return None
 
 
 room_manager = RoomManager()

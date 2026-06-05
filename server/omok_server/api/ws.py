@@ -15,7 +15,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from sqlmodel import Session
 
-from omok_server.auth.deps import get_current_user_ws
+from omok_server.auth.deps import get_current_user_ws, verify_ws_client_version
 from omok_server.db.engine import engine
 from omok_server.game.manager import manager
 from omok_server.game.room_manager import room_manager
@@ -202,7 +202,9 @@ async def _start_ticker_if_needed(session: GameSession) -> None:
 
 @router.websocket("/ws/games/{game_id}")
 async def game_ws(ws: WebSocket, game_id: str):
-    # Token validation first — closes the socket on failure.
+    if not await verify_ws_client_version(ws):
+        return
+    # Token validation second — closes the socket on failure.
     user = await get_current_user_ws(ws)
     if user is None:
         return

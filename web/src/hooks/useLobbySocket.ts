@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getToken } from "@/lib/fetcher";
+import { CLIENT_VERSION } from "@/lib/version";
 import type { RoomSummary, ServerLobbyMsg } from "@/types/protocol";
 
 export interface LobbySocketState {
@@ -19,8 +20,11 @@ export function useLobbySocket(): LobbySocketState {
 
     const connect = () => {
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const token = getToken() ?? "";
-      const url = `${proto}://${location.host}/ws/lobby?token=${encodeURIComponent(token)}`;
+      const params = new URLSearchParams();
+      const token = getToken();
+      if (token) params.set("token", token);
+      params.set("client_version", CLIENT_VERSION);
+      const url = `${proto}://${location.host}/ws/lobby?${params}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
@@ -50,6 +54,10 @@ export function useLobbySocket(): LobbySocketState {
       ws.onclose = (ev) => {
         if (cancelled) return;
         setConnected(false);
+        if (ev.code === 4426) {
+          window.dispatchEvent(new CustomEvent("omok:upgrade-required"));
+          return;
+        }
         if (ev.code === 4401 || ev.code === 4403 || ev.code === 4404) return;
         setTimeout(connect, backoff);
         backoff = Math.min(backoff * 2, 8000);

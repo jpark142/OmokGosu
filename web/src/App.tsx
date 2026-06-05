@@ -1,6 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import UpgradeBanner from "@/components/UpgradeBanner";
+import UpgradeModal from "@/components/UpgradeModal";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { VersionProvider } from "@/lib/versionContext";
 import Game from "@/routes/Game";
 import Lobby from "@/routes/Lobby";
 import Login from "@/routes/Login";
@@ -33,15 +36,22 @@ function PublicOnly({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // VersionProvider wraps everything (including AuthProvider) so version checks
+  // run even on the login page — an outdated client should see the upgrade
+  // modal before they even try to log in.
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
-        <Route path="/" element={<Navigate to="/lobby" replace />} />
-        <Route path="/lobby" element={<Protected><Lobby /></Protected>} />
-        <Route path="/rooms/:roomId" element={<Protected><Room /></Protected>} />
-        <Route path="/game/:gameId" element={<Protected><Game /></Protected>} />
-      </Routes>
-    </AuthProvider>
+    <VersionProvider>
+      <UpgradeBanner />
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+          <Route path="/" element={<Navigate to="/lobby" replace />} />
+          <Route path="/lobby" element={<Protected><Lobby /></Protected>} />
+          <Route path="/rooms/:roomId" element={<Protected><Room /></Protected>} />
+          <Route path="/game/:gameId" element={<Protected><Game /></Protected>} />
+        </Routes>
+      </AuthProvider>
+      <UpgradeModal />
+    </VersionProvider>
   );
 }

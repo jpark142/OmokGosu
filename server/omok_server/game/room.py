@@ -28,6 +28,7 @@ class Room:
     status: RoomStatus = RoomStatus.LOBBY
     current_game_id: str | None = None
     guest_ready: bool = False
+    games_played: int = 0  # incremented on each completed game; drives the "한 판 더" CTA
     created_at: float = field(default_factory=time.time)
     # Asyncio lock guarding mutations. NEVER acquire `room.lock` while holding
     # a GameSession lock — order is always game.lock → room.lock (see plan §9.3).

@@ -1,3 +1,4 @@
+import UserHoverCard from "@/components/UserHoverCard";
 import type { RoomSummary } from "@/types/protocol";
 
 interface Props {
@@ -45,11 +46,15 @@ export default function RoomCard({ room, currentUserId, onJoin, onEnter }: Props
           )}
         </div>
         <div className="text-xs text-stone-500">
-          {room.host.username} ({room.host.wins}승 {room.host.losses}패)
+          <UserHoverCard userId={room.host.user_id}>{room.host.username}</UserHoverCard>
+          {" "}
+          ({room.host.wins}승 {room.host.losses}패)
           {room.guest && (
             <>
               {" vs "}
-              {room.guest.username} ({room.guest.wins}승 {room.guest.losses}패)
+              <UserHoverCard userId={room.guest.user_id}>{room.guest.username}</UserHoverCard>
+              {" "}
+              ({room.guest.wins}승 {room.guest.losses}패)
             </>
           )}
         </div>

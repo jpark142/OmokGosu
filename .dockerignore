@@ -1,0 +1,41 @@
+# Don't ship build outputs / venvs / IDE noise into the build context.
+.git/
+.gitignore
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / web
+web/node_modules/
+web/dist/
+.vite/
+
+# Editor / OS
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Runtime data (SQLite created at container startup)
+server/data/
+
+# Electron — not part of the server image
+electron/
+dist-electron/
+
+# Docs / plans
+docs/
+*.md
+!README.md
+
+# CI artifacts (none yet but reserved)
+.github/

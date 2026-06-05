@@ -36,6 +36,24 @@ export interface UserSummary {
   username: string;
   wins: number;
   losses: number;
+  current_room_id?: string | null;  // set on /me when user is in a room
+}
+
+export interface MatchSummary {
+  match_id: number;
+  opponent_username: string | null;
+  opponent_user_id: number | null;
+  your_color: ColorStr;
+  you_won: boolean;
+  over_reason: GameOverReason;
+  is_ai_game: boolean;
+  ended_at: number;  // unix seconds
+  move_count: number;
+}
+
+export interface RecentMatches {
+  user_id: number;
+  matches: MatchSummary[];
 }
 
 export interface AuthCredentials {
@@ -79,6 +97,7 @@ export interface RoomSummary {
 export interface RoomDetail extends RoomSummary {
   guest_ready: boolean;
   current_game_id: string | null;
+  games_played: number;
 }
 
 export interface CreateRoomReq {

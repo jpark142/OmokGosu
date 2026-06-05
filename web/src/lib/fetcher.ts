@@ -6,6 +6,8 @@
 // one origin) was tried first but caused the "second login silently kicked
 // the first" bug.
 
+import { CLIENT_VERSION } from "@/lib/version";
+
 const TOKEN_KEY = "omok_token";
 
 export function getToken(): string | null {
@@ -34,7 +36,9 @@ async function request<T>(
   path: string,
   body?: Json,
 ): Promise<T> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    "X-Client-Version": CLIENT_VERSION,
+  };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const tok = getToken();
   if (tok) headers["Authorization"] = `Bearer ${tok}`;
@@ -49,6 +53,12 @@ async function request<T>(
     setToken(null);
     // Let the caller decide whether to redirect; AuthProvider listens on storage too.
     window.dispatchEvent(new CustomEvent("omok:unauthorized"));
+  }
+
+  if (res.status === 426) {
+    // Server rejected our version. VersionProvider listens for this and
+    // promotes to "hard" immediately — no need to wait for the next poll tick.
+    window.dispatchEvent(new CustomEvent("omok:upgrade-required"));
   }
 
   let payload: unknown = null;

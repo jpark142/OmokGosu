@@ -52,6 +52,23 @@ def get_current_user(
     return user
 
 
+async def verify_ws_client_version(ws: WebSocket) -> bool:
+    """Validate `?client_version=` on a WebSocket handshake.
+
+    Returns True if compatible (or version unspecified — lenient, matching the
+    HTTP middleware policy). Returns False after closing the socket with
+    close code 4426 if the version is too old.
+
+    Call this *after* ws.accept() in each /ws/* handler.
+    """
+    from omok_server.version import is_client_compatible
+    client_version = ws.query_params.get("client_version")
+    if is_client_compatible(client_version):
+        return True
+    await ws.close(code=4426)
+    return False
+
+
 async def get_current_user_ws(ws: WebSocket) -> User | None:
     """Validate ?token=... on a WebSocket. Returns User or None (after closing)."""
     token = ws.query_params.get("token", "")

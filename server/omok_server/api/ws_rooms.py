@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlmodel import Session
 
-from omok_server.auth.deps import get_current_user_ws
+from omok_server.auth.deps import get_current_user_ws, verify_ws_client_version
 from omok_server.api.rooms import leave_one_room, room_to_detail, room_to_summary
 from omok_server.db.engine import engine
 from omok_server.db.models import User
@@ -78,6 +78,8 @@ async def _send_room_state(room_id: str, target_ws: WebSocket | None = None) -> 
 
 @router.websocket("/ws/rooms/{room_id}")
 async def room_ws(ws: WebSocket, room_id: str):
+    if not await verify_ws_client_version(ws):
+        return
     user = await get_current_user_ws(ws)
     if user is None:
         return

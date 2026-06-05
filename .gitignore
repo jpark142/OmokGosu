@@ -42,6 +42,10 @@ node_modules/
 .parcel-cache/
 web/dist/
 web/build/
+*.tsbuildinfo
+
+# Electron build outputs
+dist-electron/
 
 # Editor / IDE
 .vs/

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import UserHoverCard from "@/components/UserHoverCard";
 import { useRoomSocket } from "@/hooks/useRoomSocket";
 import { leaveRoom } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -28,7 +29,9 @@ function MemberCard({
       ) : (
         <>
           <div className="flex items-center gap-2">
-            <div className="font-semibold text-lg">{member.username}</div>
+            <div className="font-semibold text-lg">
+              <UserHoverCard userId={member.user_id}>{member.username}</UserHoverCard>
+            </div>
             {isYou && <span className="text-xs px-1.5 py-0.5 bg-stone-200 rounded">나</span>}
           </div>
           <div className="text-sm text-stone-500 mt-1">
@@ -136,12 +139,35 @@ export default function Room() {
 
         {/* Title */}
         <div className="bg-white rounded-md border border-stone-200 p-4">
-          <div className="text-xs text-stone-500 mb-1">방 제목</div>
-          <div className="text-xl font-bold">{room?.title ?? "—"}</div>
-          {room?.has_password && (
-            <div className="text-xs text-stone-400 mt-1">🔒 비공개 방</div>
-          )}
+          <div className="flex justify-between items-start gap-2">
+            <div className="min-w-0">
+              <div className="text-xs text-stone-500 mb-1">방 제목</div>
+              <div className="text-xl font-bold truncate">{room?.title ?? "—"}</div>
+              {room?.has_password && (
+                <div className="text-xs text-stone-400 mt-1">🔒 비공개 방</div>
+              )}
+            </div>
+            {room && room.games_played > 0 && (
+              <div className="text-xs px-2 py-1 bg-stone-100 rounded text-stone-600 whitespace-nowrap">
+                지금까지 {room.games_played}판
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Rematch banner: shown after the first completed game while waiting in LOBBY */}
+        {room && room.games_played > 0 && room.status === "LOBBY" && (
+          <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-900 text-center">
+            방금 한 판 끝났습니다 — <strong>한 판 더?</strong>{" "}
+            {isHost
+              ? room.guest_ready
+                ? "게스트가 준비 완료, 시작하세요."
+                : "게스트의 준비를 기다리는 중..."
+              : room?.guest_ready
+                ? "방장이 시작할 때까지 대기 중..."
+                : "Ready 버튼을 눌러 다시 시작하세요."}
+          </div>
+        )}
 
         {/* Members */}
         <div className="grid grid-cols-2 gap-3">
@@ -170,7 +196,11 @@ export default function Room() {
                   : "bg-green-600 text-white hover:bg-green-700"
               }`}
             >
-              {room?.guest_ready ? "Ready 취소" : "Ready"}
+              {room?.guest_ready
+                ? "Ready 취소"
+                : room && room.games_played > 0
+                  ? "한 판 더 (Ready)"
+                  : "Ready"}
             </button>
           )}
           {isHost && (
@@ -179,7 +209,7 @@ export default function Room() {
               disabled={!room?.guest || !room?.guest_ready}
               className="w-full py-3 bg-stone-900 text-white rounded font-medium hover:bg-stone-800 disabled:bg-stone-300"
             >
-              게임 시작
+              {room && room.games_played > 0 ? "한 판 더 시작" : "게임 시작"}
             </button>
           )}
           <button

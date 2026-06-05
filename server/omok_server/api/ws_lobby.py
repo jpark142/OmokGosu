@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlmodel import Session
 
-from omok_server.auth.deps import get_current_user_ws
+from omok_server.auth.deps import get_current_user_ws, verify_ws_client_version
 from omok_server.api.rooms import room_to_summary
 from omok_server.db.engine import engine
 from omok_server.game.room_manager import room_manager
@@ -42,6 +42,8 @@ async def broadcast_lobby(payload: dict) -> None:
 
 @router.websocket("/ws/lobby")
 async def lobby_ws(ws: WebSocket):
+    if not await verify_ws_client_version(ws):
+        return
     user = await get_current_user_ws(ws)
     if user is None:
         return

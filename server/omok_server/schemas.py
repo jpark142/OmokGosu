@@ -112,6 +112,7 @@ class UserSummary(BaseModel):
     username: str
     wins: int
     losses: int
+    current_room_id: str | None = None  # set on /api/auth/me when the user sits in a room
 
     @property
     def games_played(self) -> int:
@@ -120,6 +121,24 @@ class UserSummary(BaseModel):
     @property
     def win_rate(self) -> float:
         return 0.0 if self.games_played == 0 else self.wins / self.games_played
+
+
+class MatchSummary(BaseModel):
+    """One row of a user's recent match history for the hover card."""
+    match_id: int
+    opponent_username: str | None  # None for AI games
+    opponent_user_id: int | None
+    your_color: ColorStr
+    you_won: bool
+    over_reason: GameOverReason
+    is_ai_game: bool
+    ended_at: float  # unix timestamp (seconds)
+    move_count: int
+
+
+class RecentMatches(BaseModel):
+    user_id: int
+    matches: list[MatchSummary]
 
 
 class AuthCredentials(BaseModel):
@@ -172,6 +191,7 @@ class RoomDetail(RoomSummary):
     """Room state from inside the room (members + readiness)."""
     guest_ready: bool
     current_game_id: str | None = None
+    games_played: int = 0  # drives "한 판 더" CTA on rematch
 
 
 class CreateRoomReq(BaseModel):
