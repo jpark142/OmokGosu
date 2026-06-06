@@ -5,6 +5,7 @@ import UpgradeModal from "@/components/UpgradeModal";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { VersionProvider } from "@/lib/versionContext";
 import Game from "@/routes/Game";
+import Leaderboard from "@/routes/Leaderboard";
 import Lobby from "@/routes/Lobby";
 import Login from "@/routes/Login";
 import MatchReplay from "@/routes/MatchReplay";
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/rooms/:roomId" element={<Protected><Room /></Protected>} />
           <Route path="/game/:gameId" element={<Protected><Game /></Protected>} />
           <Route path="/matches/:matchId" element={<Protected><MatchReplay /></Protected>} />
+          <Route path="/leaderboard" element={<Protected><Leaderboard /></Protected>} />
         </Routes>
       </AuthProvider>
       <UpgradeModal />

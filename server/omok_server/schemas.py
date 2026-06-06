@@ -156,6 +156,19 @@ class RecentMatches(BaseModel):
     matches: list[MatchSummary]
 
 
+class LeaderboardEntry(BaseModel):
+    """One row of the global ranking. Sorted client→server by wins desc."""
+    rank: int
+    user_id: int
+    username: str
+    wins: int
+    losses: int
+
+
+class Leaderboard(BaseModel):
+    entries: list[LeaderboardEntry]
+
+
 class AuthCredentials(BaseModel):
     username: str = Field(min_length=2, max_length=24)
     password: str = Field(min_length=4, max_length=128)

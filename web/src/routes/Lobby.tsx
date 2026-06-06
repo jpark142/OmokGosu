@@ -121,6 +121,13 @@ export default function Lobby() {
                 </div>
               </div>
               <button
+                onClick={() => navigate("/leaderboard")}
+                className="text-xs text-stone-500 hover:text-stone-900"
+                title="전체 랭킹"
+              >
+                🏆 랭킹
+              </button>
+              <button
                 onClick={logout}
                 className="text-xs text-stone-500 hover:text-stone-900"
               >

@@ -56,6 +56,18 @@ export interface RecentMatches {
   matches: MatchSummary[];
 }
 
+export interface LeaderboardEntry {
+  rank: number;
+  user_id: number;
+  username: string;
+  wins: number;
+  losses: number;
+}
+
+export interface Leaderboard {
+  entries: LeaderboardEntry[];
+}
+
 export interface MatchDetail {
   match_id: number;
   game_id: string;

@@ -11,11 +11,41 @@ from omok_server.db.models import Match, User
 from omok_server.schemas import (
     ColorStr,
     GameOverReason,
+    Leaderboard,
+    LeaderboardEntry,
     MatchSummary,
     RecentMatches,
 )
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+@router.get("/leaderboard", response_model=Leaderboard)
+def leaderboard(
+    _viewer: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_db_session)],
+    limit: int = Query(default=20, ge=1, le=100),
+) -> Leaderboard:
+    """Top users by total wins. Users with zero games are excluded so the
+    board doesn't fill up with brand-new accounts. Stats include AI-game
+    wins/losses — same as displayed elsewhere in the UI."""
+    rows = session.exec(
+        select(User)
+        .where((User.wins + User.losses) > 0)
+        .order_by(User.wins.desc(), User.losses.asc(), User.id.asc())
+        .limit(limit)
+    ).all()
+    entries = [
+        LeaderboardEntry(
+            rank=i + 1,
+            user_id=u.id,
+            username=u.username,
+            wins=u.wins,
+            losses=u.losses,
+        )
+        for i, u in enumerate(rows)
+    ]
+    return Leaderboard(entries=entries)
 
 
 @router.get("/{user_id}/recent-matches", response_model=RecentMatches)

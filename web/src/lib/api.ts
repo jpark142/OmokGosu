@@ -4,6 +4,7 @@ import type {
   CreateGameResponse,
   CreateRoomReq,
   JoinRoomReq,
+  Leaderboard,
   MatchDetail,
   RecentMatches,
   RoomDetail,
@@ -47,4 +48,8 @@ export function getRecentMatches(userId: number, limit = 5): Promise<RecentMatch
 
 export function getMatch(matchId: number): Promise<MatchDetail> {
   return http.get<MatchDetail>(`/api/matches/${matchId}`);
+}
+
+export function getLeaderboard(limit = 20): Promise<Leaderboard> {
+  return http.get<Leaderboard>(`/api/users/leaderboard?limit=${limit}`);
 }
