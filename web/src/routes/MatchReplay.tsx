@@ -17,6 +17,7 @@ const REASON_LABEL: Record<GameOverReason, string> = {
   OVERLINE_WIN: "장목 승 (백)",
   RESIGN: "기권",
   TIMEOUT: "시간패",
+  DRAW: "판 가득 (무승부)",
 };
 
 export default function MatchReplay() {

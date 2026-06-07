@@ -68,14 +68,16 @@ export default function Leaderboard() {
                   <th className="px-4 py-2 text-left w-12">순위</th>
                   <th className="px-4 py-2 text-left">닉네임</th>
                   <th className="px-4 py-2 text-right w-16">승</th>
+                  <th className="px-4 py-2 text-right w-16">무</th>
                   <th className="px-4 py-2 text-right w-16">패</th>
                   <th className="px-4 py-2 text-right w-16">승률</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.map((e) => {
-                  const total = e.wins + e.losses;
-                  const winRate = total > 0 ? Math.round((e.wins / total) * 100) : 0;
+                  const draws = e.draws ?? 0;
+                  const decisive = e.wins + e.losses;
+                  const winRate = decisive > 0 ? Math.round((e.wins / decisive) * 100) : 0;
                   const isMe = user?.id === e.user_id;
                   const badge = rankBadge(e.rank);
                   return (
@@ -101,10 +103,16 @@ export default function Leaderboard() {
                       <td className="px-4 py-2 text-right text-green-600 font-medium">
                         {e.wins}
                       </td>
+                      <td className="px-4 py-2 text-right text-stone-500">
+                        {draws}
+                      </td>
                       <td className="px-4 py-2 text-right text-red-600 font-medium">
                         {e.losses}
                       </td>
-                      <td className="px-4 py-2 text-right text-stone-700">
+                      <td
+                        className="px-4 py-2 text-right text-stone-700"
+                        title="무승부 제외"
+                      >
                         {winRate}%
                       </td>
                     </tr>

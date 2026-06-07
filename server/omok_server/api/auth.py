@@ -25,6 +25,7 @@ def _to_summary(u: User, current_room_id: str | None = None) -> UserSummary:
         username=u.username,
         wins=u.wins,
         losses=u.losses,
+        draws=u.draws,
         current_room_id=current_room_id,
     )
 

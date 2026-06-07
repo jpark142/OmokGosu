@@ -86,6 +86,42 @@ def test_record_match_hva_loss_does_not_change_stats() -> None:
         assert refreshed.wins == 0 and refreshed.losses == 0
 
 
+def test_record_match_draw_records_match_and_bumps_draws() -> None:
+    """A draw inserts the Match and bumps each human's draws (but never
+    wins/losses) — draws show up in 전적 but are excluded from win rate."""
+    uid_a = _make_user(_u())
+    uid_b = _make_user(_u())
+    s = GameSession.new(
+        mode=GameMode.HVH,
+        human_name="alice",
+        human_user_id=uid_a,
+        guest_name="bob",
+        guest_user_id=uid_b,
+    )
+    s.status = GameStatus.OVER
+    s.winner = None  # draw
+    from omok_server.schemas import GameOverReason
+    s.over_reason = GameOverReason.DRAW
+
+    result = record_match(s, started_at=datetime.utcnow())
+    assert result.match_id is not None
+    # Both users get a stats_update with draws=1.
+    assert len(result.stats_updates) == 2
+    by_user = {u.user_id: u for u in result.stats_updates}
+    assert by_user[uid_a].wins == 0 and by_user[uid_a].losses == 0 and by_user[uid_a].draws == 1
+    assert by_user[uid_b].wins == 0 and by_user[uid_b].losses == 0 and by_user[uid_b].draws == 1
+
+    with Session(engine) as db:
+        m = db.exec(select(Match).where(Match.id == result.match_id)).first()
+        assert m is not None
+        assert m.winner_user_id is None
+        assert m.over_reason == "DRAW"
+        a = db.exec(select(User).where(User.id == uid_a)).first()
+        b = db.exec(select(User).where(User.id == uid_b)).first()
+        assert a.wins == 0 and a.losses == 0 and a.draws == 1
+        assert b.wins == 0 and b.losses == 0 and b.draws == 1
+
+
 def test_record_match_hvh_both_users_updated() -> None:
     uid_a = _make_user(_u())
     uid_b = _make_user(_u())

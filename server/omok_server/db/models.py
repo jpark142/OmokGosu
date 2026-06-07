@@ -13,6 +13,9 @@ class User(SQLModel, table=True):
     password_hash: str
     wins: int = Field(default=0)
     losses: int = Field(default=0)
+    # Counted separately from wins/losses so the UI can show "Nm" without
+    # polluting either side. Win rate (wins / (wins + losses)) ignores this.
+    draws: int = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     # Bumped on every successful login. The current JWT carries this as its
     # `ver` claim; auth deps reject tokens whose ver doesn't match. This is

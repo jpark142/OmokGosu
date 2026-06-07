@@ -25,10 +25,13 @@ export default function Lobby() {
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
 
+  // Win rate denominator counts only decisive games — draws are listed
+  // separately in the strip below but don't influence the percentage.
   const winRate =
     user && user.wins + user.losses > 0
       ? `${Math.round((user.wins / (user.wins + user.losses)) * 100)}%`
       : "—";
+  const userDraws = user?.draws ?? 0;
 
   const onCreate = async (title: string, password: string) => {
     setBusy(true);
@@ -115,6 +118,12 @@ export default function Lobby() {
                 <div className="font-medium">{user.username}</div>
                 <div className="text-xs text-stone-500">
                   <span className="text-green-600">{user.wins}승</span>
+                  {userDraws > 0 && (
+                    <>
+                      {" · "}
+                      <span className="text-stone-500">{userDraws}무</span>
+                    </>
+                  )}
                   {" · "}
                   <span className="text-red-600">{user.losses}패</span>
                   {" · "}

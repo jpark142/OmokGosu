@@ -48,13 +48,13 @@ export default function RoomCard({ room, currentUserId, onJoin, onEnter }: Props
         <div className="text-xs text-stone-500">
           <UserHoverCard userId={room.host.user_id}>{room.host.username}</UserHoverCard>
           {" "}
-          ({room.host.wins}승 {room.host.losses}패)
+          ({room.host.wins}승{(room.host.draws ?? 0) > 0 && ` ${room.host.draws}무`} {room.host.losses}패)
           {room.guest && (
             <>
               {" vs "}
               <UserHoverCard userId={room.guest.user_id}>{room.guest.username}</UserHoverCard>
               {" "}
-              ({room.guest.wins}승 {room.guest.losses}패)
+              ({room.guest.wins}승{(room.guest.draws ?? 0) > 0 && ` ${room.guest.draws}무`} {room.guest.losses}패)
             </>
           )}
         </div>

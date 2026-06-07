@@ -81,3 +81,24 @@ def test_state_msg_no_forbidden_when_white_to_move() -> None:
     msg = gs.to_state_msg()
     assert msg.to_move == ColorStr.WHITE
     assert msg.forbidden_squares == []
+
+
+def test_apply_move_full_board_ends_in_draw(monkeypatch) -> None:
+    """When the 225th stone goes down without making 5, the session draws.
+
+    Constructing a real no-5-in-a-row 225-stone board is fiddly; for the
+    state-machine assertion we only need apply_move's draw branch to fire,
+    so we stub the win check and the move count.
+    """
+    from omok_server.game.engine import Engine
+    gs = GameSession.new()
+    # Pretend a stone is the 225th regardless of actual count, and that
+    # no 5-in-a-row exists.
+    monkeypatch.setattr(Engine, "move_number", property(lambda self: 225))
+    monkeypatch.setattr(gs.engine, "last_move_wins", lambda: False)
+
+    reason = gs.apply_move(7, 7, ColorStr.BLACK)
+    assert reason is None
+    assert gs.status == GameStatus.OVER
+    assert gs.winner is None
+    assert gs.over_reason == GameOverReason.DRAW

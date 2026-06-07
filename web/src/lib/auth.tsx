@@ -17,7 +17,7 @@ interface AuthValue {
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
-  applyStats: (wins: number, losses: number) => void;
+  applyStats: (wins: number, losses: number, draws?: number) => void;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -166,9 +166,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Optimistic update from WS SGameOverMsg.stats_updates (avoids /me round-trip).
-  const applyStats = useCallback((wins: number, losses: number) => {
-    setUser((prev) => (prev ? { ...prev, wins, losses } : prev));
-  }, []);
+  const applyStats = useCallback(
+    (wins: number, losses: number, draws?: number) => {
+      setUser((prev) =>
+        prev
+          ? { ...prev, wins, losses, draws: draws ?? prev.draws ?? 0 }
+          : prev,
+      );
+    },
+    [],
+  );
 
   const value = useMemo<AuthValue>(
     () => ({ user, token, initializing, login, register, logout, refreshMe, applyStats }),

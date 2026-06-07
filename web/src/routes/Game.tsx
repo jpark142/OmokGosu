@@ -29,14 +29,20 @@ const REASON_LABEL: Record<GameOverReason, string> = {
   OVERLINE_WIN: "장목 승 (백)",
   RESIGN: "기권",
   TIMEOUT: "시간패",
+  DRAW: "판 가득 (무승부)",
 };
 
 function PlayerLine({ info }: { info: PlayerInfo | undefined }) {
   if (!info) return <span className="text-stone-400">—</span>;
-  const stats =
-    info.wins !== undefined && info.wins !== null && info.losses !== undefined && info.losses !== null
-      ? `${info.wins}승 ${info.losses}패`
-      : null;
+  const hasStats =
+    info.wins !== undefined && info.wins !== null &&
+    info.losses !== undefined && info.losses !== null;
+  const draws = info.draws ?? 0;
+  const stats = hasStats
+    ? draws > 0
+      ? `${info.wins}승 ${draws}무 ${info.losses}패`
+      : `${info.wins}승 ${info.losses}패`
+    : null;
   return (
     <div>
       <div className="text-xs uppercase text-stone-500">
@@ -77,7 +83,7 @@ export default function Game() {
         });
         if (user && msg.stats_updates) {
           const mine = msg.stats_updates.find((s) => s.user_id === user.id);
-          if (mine) applyStats(mine.wins, mine.losses);
+          if (mine) applyStats(mine.wins, mine.losses, mine.draws);
         }
       } else if (msg.type === "error") {
         toast.error(msg.message);

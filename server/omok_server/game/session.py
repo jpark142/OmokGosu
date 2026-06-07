@@ -134,10 +134,11 @@ class GameSession:
 
         hydrated: dict[ColorStr, PlayerInfo] = {}
         for color, info in self.players.items():
-            wins_losses = stats_map.get(info.user_id) if info.user_id is not None else None
-            if wins_losses is not None:
+            stats = stats_map.get(info.user_id) if info.user_id is not None else None
+            if stats is not None:
+                wins, losses, draws = stats
                 hydrated[color] = info.model_copy(
-                    update={"wins": wins_losses[0], "losses": wins_losses[1]}
+                    update={"wins": wins, "losses": losses, "draws": draws}
                 )
             else:
                 hydrated[color] = info
@@ -185,6 +186,17 @@ class GameSession:
                 if color == ColorStr.WHITE and self._last_move_was_overline()
                 else GameOverReason.FIVE
             )
+            return None
+
+        # Draw: board is completely full and the last move didn't win. With a
+        # 15×15 board that's exactly 225 stones. Practically rare in Renju
+        # (black's forbidden moves usually end the game first) but the rules
+        # do allow it, so we have to terminate the session here rather than
+        # try to start the next turn on a board with no empty squares left.
+        if self.engine.move_number >= 15 * 15:
+            self.status = GameStatus.OVER
+            self.winner = None
+            self.over_reason = GameOverReason.DRAW
             return None
 
         # Continue: start opponent's clock.

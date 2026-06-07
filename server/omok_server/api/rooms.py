@@ -30,14 +30,19 @@ def _member_for(user_id: int, session: Session) -> RoomMemberSummary | None:
     user = session.exec(select(User).where(User.id == user_id)).first()
     if user is None:
         return None
-    return RoomMemberSummary(user_id=user.id, username=user.username, wins=user.wins, losses=user.losses)
+    return RoomMemberSummary(
+        user_id=user.id, username=user.username,
+        wins=user.wins, losses=user.losses, draws=user.draws,
+    )
 
 
 def room_to_summary(room: Room, session: Session) -> RoomSummary:
     host = _member_for(room.host_user_id, session)
     if host is None:
         # Host vanished from DB — shouldn't happen but treat as anonymous placeholder.
-        host = RoomMemberSummary(user_id=room.host_user_id, username="?", wins=0, losses=0)
+        host = RoomMemberSummary(
+            user_id=room.host_user_id, username="?", wins=0, losses=0, draws=0,
+        )
     guest = _member_for(room.guest_user_id, session) if room.guest_user_id is not None else None
     return RoomSummary(
         room_id=room.room_id,

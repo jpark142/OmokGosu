@@ -17,6 +17,7 @@ const REASON_LABEL: Record<GameOverReason, string> = {
   OVERLINE_WIN: "장목 승 (백)",
   RESIGN: "기권",
   TIMEOUT: "시간패",
+  DRAW: "무승부",
 };
 
 function formatRelative(secondsAgo: number): string {
@@ -88,8 +89,12 @@ export default function UserProfile() {
     );
   }
 
-  const total = profile.wins + profile.losses;
-  const winRate = total > 0 ? Math.round((profile.wins / total) * 100) : 0;
+  // Draws are deliberately excluded from win-rate math; only decisive
+  // games (wins + losses) make up the denominator.
+  const draws = profile.draws ?? 0;
+  const decisive = profile.wins + profile.losses;
+  const total = decisive + draws;
+  const winRate = decisive > 0 ? Math.round((profile.wins / decisive) * 100) : 0;
   const isMe = me?.id === profile.id;
   const now = Date.now() / 1000;
 
@@ -120,12 +125,20 @@ export default function UserProfile() {
               <div className="text-xl font-medium">
                 <span className="text-green-600">{profile.wins}</span>
                 {" / "}
+                <span className="text-stone-500">{draws}</span>
+                {" / "}
                 <span className="text-red-600">{profile.losses}</span>
               </div>
+              <div className="text-[10px] text-stone-400 mt-0.5">승 / 무 / 패</div>
             </div>
             <div>
               <div className="text-xs text-stone-500 uppercase">승률</div>
-              <div className="text-xl font-medium">{total > 0 ? `${winRate}%` : "—"}</div>
+              <div
+                className="text-xl font-medium"
+                title="무승부는 승률 계산에서 제외됩니다"
+              >
+                {decisive > 0 ? `${winRate}%` : "—"}
+              </div>
             </div>
             <div>
               <div className="text-xs text-stone-500 uppercase">총 경기</div>
@@ -153,15 +166,23 @@ export default function UserProfile() {
                   >
                     <span
                       className={`inline-block w-1.5 h-5 rounded ${
-                        m.you_won ? "bg-green-500" : "bg-red-400"
+                        m.is_draw
+                          ? "bg-stone-400"
+                          : m.you_won
+                            ? "bg-green-500"
+                            : "bg-red-400"
                       }`}
                     />
                     <span
                       className={`font-semibold w-8 ${
-                        m.you_won ? "text-green-700" : "text-red-600"
+                        m.is_draw
+                          ? "text-stone-600"
+                          : m.you_won
+                            ? "text-green-700"
+                            : "text-red-600"
                       }`}
                     >
-                      {m.you_won ? "승" : "패"}
+                      {m.is_draw ? "무" : m.you_won ? "승" : "패"}
                     </span>
                     <span className="flex-1 truncate flex items-center gap-2 min-w-0">
                       {m.is_ai_game ? (

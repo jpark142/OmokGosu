@@ -42,6 +42,7 @@ class GameOverReason(str, Enum):
     OVERLINE_WIN = "OVERLINE_WIN"
     RESIGN = "RESIGN"
     TIMEOUT = "TIMEOUT"
+    DRAW = "DRAW"
 
 
 class ForbiddenReason(str, Enum):
@@ -80,6 +81,7 @@ class PlayerInfo(BaseModel):
     user_id: int | None = None  # NULL for AI (or pre-Phase-3A sessions)
     wins: int | None = None     # populated by session.to_state_msg via DB lookup
     losses: int | None = None
+    draws: int | None = None
 
 
 class ClockSnapshot(BaseModel):
@@ -112,10 +114,15 @@ class UserSummary(BaseModel):
     username: str
     wins: int
     losses: int
+    # Draws are shown in 전적 alongside wins/losses but deliberately excluded
+    # from win-rate math (denominator = wins + losses). Defaults to 0 so
+    # older clients that don't send this field still serialize fine.
+    draws: int = 0
     current_room_id: str | None = None  # set on /api/auth/me when the user sits in a room
 
     @property
     def games_played(self) -> int:
+        # Decided count for win-rate purposes — draws excluded by design.
         return self.wins + self.losses
 
     @property
@@ -130,6 +137,10 @@ class MatchSummary(BaseModel):
     opponent_user_id: int | None
     your_color: ColorStr
     you_won: bool
+    # True when the match ended in a draw (board filled with no winner).
+    # The client should prefer this over `you_won` when deciding what label
+    # to render — a draw is neither a win nor a loss.
+    is_draw: bool = False
     over_reason: GameOverReason
     is_ai_game: bool
     ended_at: float  # unix timestamp (seconds)
@@ -163,6 +174,7 @@ class LeaderboardEntry(BaseModel):
     username: str
     wins: int
     losses: int
+    draws: int = 0
 
 
 class Leaderboard(BaseModel):
@@ -186,6 +198,7 @@ class StatsUpdate(BaseModel):
     user_id: int
     wins: int
     losses: int
+    draws: int = 0
 
 
 # ---------- Rooms (Phase 3B) ----------
@@ -202,6 +215,7 @@ class RoomMemberSummary(BaseModel):
     username: str
     wins: int
     losses: int
+    draws: int = 0
 
 
 class RoomSummary(BaseModel):

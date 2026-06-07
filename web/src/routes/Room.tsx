@@ -41,6 +41,12 @@ function MemberCard({
           </div>
           <div className="text-sm text-stone-500 mt-1">
             <span className="text-green-600">{member.wins}승</span>
+            {(member.draws ?? 0) > 0 && (
+              <>
+                {" · "}
+                <span className="text-stone-500">{member.draws}무</span>
+              </>
+            )}
             {" · "}
             <span className="text-red-600">{member.losses}패</span>
             {member.wins + member.losses > 0 && (

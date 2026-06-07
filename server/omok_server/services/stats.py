@@ -101,9 +101,12 @@ def record_match(session: GameSession, started_at: datetime) -> MatchResult:
         # ranked human-vs-human results. The Match row stays so the user
         # can still scroll through and replay AI games.
         if not is_ai:
-            # For each human participant: if their color won → wins+1, else losses+1.
-            # `session.winner` is the *color* that won, not a user_id, so we compare
-            # to the player's color directly.
+            # For each human participant: if their color won → wins+1, lost
+            # color → losses+1, draw → draws+1. `session.winner` is the *color*
+            # that won (not a user_id), so we compare to the player's color
+            # directly. Draws are tracked separately from wins/losses so the
+            # UI can show 승/무/패 without polluting the win-rate denominator.
+            is_draw = session.winner is None
             for color in (ColorStr.BLACK, ColorStr.WHITE):
                 uid = _user_id_for(session, color)
                 if uid is None:
@@ -111,24 +114,30 @@ def record_match(session: GameSession, started_at: datetime) -> MatchResult:
                 user = db.exec(select(User).where(User.id == uid)).first()
                 if user is None:
                     continue
-                if session.winner == color:
+                if is_draw:
+                    user.draws += 1
+                elif session.winner == color:
                     user.wins += 1
-                elif session.winner is not None:
+                else:
                     user.losses += 1
-                # session.winner is None → draw (currently unreachable in Renju); skip.
                 db.add(user)
-                updates.append(StatsUpdate(user_id=user.id, wins=user.wins, losses=user.losses))
+                updates.append(StatsUpdate(
+                    user_id=user.id, wins=user.wins, losses=user.losses, draws=user.draws,
+                ))
         db.commit()
         match_id = match.id
 
     return MatchResult(match_id=match_id, stats_updates=updates)
 
 
-def fetch_user_stats(user_ids: Iterable[int]) -> dict[int, tuple[int, int]]:
-    """Bulk-fetch wins/losses for the given user_ids. Used by GameSession.to_state_msg."""
+def fetch_user_stats(user_ids: Iterable[int]) -> dict[int, tuple[int, int, int]]:
+    """Bulk-fetch (wins, losses, draws) for the given user_ids.
+
+    Used by GameSession.to_state_msg to hydrate the in-game player cards.
+    """
     ids = [u for u in user_ids if u is not None]
     if not ids:
         return {}
     with Session(engine) as db:
         rows = db.exec(select(User).where(User.id.in_(ids))).all()
-    return {u.id: (u.wins, u.losses) for u in rows}
+    return {u.id: (u.wins, u.losses, u.draws) for u in rows}

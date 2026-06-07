@@ -4,7 +4,7 @@ export type ColorStr = "BLACK" | "WHITE";
 export type GameMode = "hvh" | "hva";
 export type AILevel = "random" | "smart" | "minimax" | "heuristic" | "alphazero";
 export type GameStatus = "IN_PROGRESS" | "OVER";
-export type GameOverReason = "FIVE" | "OVERLINE_WIN" | "RESIGN" | "TIMEOUT";
+export type GameOverReason = "FIVE" | "OVERLINE_WIN" | "RESIGN" | "TIMEOUT" | "DRAW";
 export type ForbiddenReason =
   | "DOUBLE_THREE"
   | "DOUBLE_FOUR"
@@ -27,6 +27,7 @@ export interface PlayerInfo {
   user_id?: number | null;
   wins?: number | null;
   losses?: number | null;
+  draws?: number | null;
 }
 
 // ---------- Auth (Phase 3A) ----------
@@ -36,6 +37,7 @@ export interface UserSummary {
   username: string;
   wins: number;
   losses: number;
+  draws?: number;  // shown in 전적, excluded from win-rate denominator
   current_room_id?: string | null;  // set on /me when user is in a room
 }
 
@@ -45,6 +47,10 @@ export interface MatchSummary {
   opponent_user_id: number | null;
   your_color: ColorStr;
   you_won: boolean;
+  // True for draws (board filled with no winner). Prefer this over you_won
+  // when picking a win/loss/draw label; you_won is false for both losses
+  // and draws but only is_draw distinguishes the two.
+  is_draw?: boolean;
   over_reason: GameOverReason;
   is_ai_game: boolean;
   ended_at: number;  // unix seconds
@@ -62,6 +68,7 @@ export interface LeaderboardEntry {
   username: string;
   wins: number;
   losses: number;
+  draws?: number;
 }
 
 export interface Leaderboard {
@@ -97,6 +104,7 @@ export interface StatsUpdate {
   user_id: number;
   wins: number;
   losses: number;
+  draws?: number;
 }
 
 // ---------- Rooms (Phase 3B) ----------
@@ -108,6 +116,7 @@ export interface RoomMemberSummary {
   username: string;
   wins: number;
   losses: number;
+  draws?: number;
 }
 
 export interface RoomSummary {

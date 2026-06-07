@@ -70,6 +70,11 @@ def _run_inline_migrations() -> None:
                 "ALTER TABLE user ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"
             ))
             conn.commit()
+        if "draws" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE user ADD COLUMN draws INTEGER NOT NULL DEFAULT 0"
+            ))
+            conn.commit()
 
         # One-shot backfill: AI games no longer affect wins/losses, but old
         # rows still have them counted. Recompute User.wins/losses from
@@ -93,6 +98,20 @@ def _run_inline_migrations() -> None:
                     )
             """))
             conn.execute(text("PRAGMA user_version = 1"))
+            conn.commit()
+
+        # v2: backfill draws from Match rows. Skipped HVA (is_ai_game=1) for
+        # the same reason wins/losses are HVH-only.
+        if (current_version or 0) < 2:
+            conn.execute(text("""
+                UPDATE user SET draws = (
+                    SELECT COUNT(*) FROM match
+                    WHERE match.is_ai_game = 0
+                      AND match.over_reason = 'DRAW'
+                      AND (match.black_user_id = user.id OR match.white_user_id = user.id)
+                )
+            """))
+            conn.execute(text("PRAGMA user_version = 2"))
             conn.commit()
 
 
