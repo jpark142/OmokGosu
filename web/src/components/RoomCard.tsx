@@ -6,9 +6,10 @@ interface Props {
   currentUserId: number | undefined;
   onJoin: (room: RoomSummary) => void;
   onEnter: (room: RoomSummary) => void;
+  onSpectate: (gameId: string) => void;
 }
 
-export default function RoomCard({ room, currentUserId, onJoin, onEnter }: Props) {
+export default function RoomCard({ room, currentUserId, onJoin, onEnter, onSpectate }: Props) {
   const youHost = currentUserId !== undefined && currentUserId === room.host.user_id;
   const youGuest =
     currentUserId !== undefined && room.guest !== null && currentUserId === room.guest.user_id;
@@ -67,6 +68,13 @@ export default function RoomCard({ room, currentUserId, onJoin, onEnter }: Props
             className="text-sm px-3 py-1 bg-amber-500 text-white rounded hover:bg-amber-600"
           >
             이어서
+          </button>
+        ) : playing && room.current_game_id ? (
+          <button
+            onClick={() => onSpectate(room.current_game_id!)}
+            className="text-sm px-3 py-1 bg-sky-600 text-white rounded hover:bg-sky-700"
+          >
+            관전하기
           </button>
         ) : (
           <button

@@ -78,6 +78,12 @@ export default function Lobby() {
     navigate(`/rooms/${room.room_id}`);
   };
 
+  // Jump directly into the game WS as a read-only viewer. RoomSummary now
+  // carries current_game_id for PLAYING rooms so no extra REST call is needed.
+  const onSpectate = (gameId: string) => {
+    navigate(`/game/${gameId}`);
+  };
+
   const onAIStart = async (level: AILevel, difficulty: AIDifficulty | undefined) => {
     setBusy(true);
     try {
@@ -197,6 +203,7 @@ export default function Lobby() {
                 currentUserId={user?.id}
                 onJoin={onJoin}
                 onEnter={onEnter}
+                onSpectate={onSpectate}
               />
             ))
           )}

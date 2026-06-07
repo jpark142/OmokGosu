@@ -94,19 +94,22 @@ def record_match(session: GameSession, started_at: datetime) -> MatchResult:
     )
 
     updates: list[StatsUpdate] = []
+    is_aborted = session.over_reason == GameOverReason.ABORTED
     with Session(engine) as db:
         db.add(match)
         # AI games are recorded for history (kept visible on the profile)
         # but deliberately do NOT touch wins/losses — those count only
         # ranked human-vs-human results. The Match row stays so the user
-        # can still scroll through and replay AI games.
-        if not is_ai:
+        # can still scroll through and replay AI games. Aborted games (resign
+        # before move 1) are kept on the history with reason=ABORTED but also
+        # leave wins/losses/draws untouched.
+        if not is_ai and not is_aborted:
             # For each human participant: if their color won → wins+1, lost
             # color → losses+1, draw → draws+1. `session.winner` is the *color*
             # that won (not a user_id), so we compare to the player's color
             # directly. Draws are tracked separately from wins/losses so the
             # UI can show 승/무/패 without polluting the win-rate denominator.
-            is_draw = session.winner is None
+            is_draw = session.over_reason == GameOverReason.DRAW
             for color in (ColorStr.BLACK, ColorStr.WHITE):
                 uid = _user_id_for(session, color)
                 if uid is None:
@@ -141,3 +144,23 @@ def fetch_user_stats(user_ids: Iterable[int]) -> dict[int, tuple[int, int, int]]
     with Session(engine) as db:
         rows = db.exec(select(User).where(User.id.in_(ids))).all()
     return {u.id: (u.wins, u.losses, u.draws) for u in rows}
+
+
+def fetch_user_ranks(user_ids: Iterable[int]) -> dict[int, int]:
+    """For each user_id that has at least one decided game (wins + losses > 0),
+    return their global rank using the same ordering as `/api/users/leaderboard`
+    (wins DESC, losses ASC, id ASC). Users with no decided games are omitted.
+
+    The in-game participants panel hydrates rank from this.
+    """
+    ids = [u for u in user_ids if u is not None]
+    if not ids:
+        return {}
+    with Session(engine) as db:
+        all_ranked = db.exec(
+            select(User.id)
+            .where((User.wins + User.losses) > 0)
+            .order_by(User.wins.desc(), User.losses.asc(), User.id.asc())
+        ).all()
+    rank_by_id = {uid: i + 1 for i, uid in enumerate(all_ranked)}
+    return {uid: rank_by_id[uid] for uid in ids if uid in rank_by_id}

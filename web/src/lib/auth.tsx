@@ -64,7 +64,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const onUnauthorized = (ev: Event) => {
       const reason = (ev as CustomEvent<{ reason?: string }>).detail?.reason;
       if (reason === "session displaced") {
-        toast.error("다른 곳에서 로그인되어 자동 로그아웃되었습니다.");
+        // dedupe — both REST 401 and WS 4401 can fire near-simultaneously.
+        toast.error("다른 곳에서 로그인되어 자동 로그아웃되었습니다.", {
+          id: "session-displaced",
+        });
       }
       setUser(null);
       setTokenState(null);
@@ -115,6 +118,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, password: string) => {
     try {
       const res = await http.post<AuthResponse>("/api/auth/login", { username, password });
+      // Grace window: the server force-closes all prior WS for this user as
+      // part of /login. Any 4401 close that lands on the *previous* token's
+      // sockets in the next few seconds is expected — don't toast ourselves
+      // out of the new session.
+      (window as unknown as { __omokJustLoggedInAt?: number }).__omokJustLoggedInAt = Date.now();
       setToken(res.access_token);
       setTokenState(res.access_token);
       setUser(res.user);
@@ -129,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (username: string, password: string) => {
     try {
       const res = await http.post<AuthResponse>("/api/auth/register", { username, password });
+      (window as unknown as { __omokJustLoggedInAt?: number }).__omokJustLoggedInAt = Date.now();
       setToken(res.access_token);
       setTokenState(res.access_token);
       setUser(res.user);

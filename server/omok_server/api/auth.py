@@ -15,6 +15,7 @@ from omok_server.auth.deps import get_current_user, get_db_session
 from omok_server.auth.security import create_access_token, hash_password, verify_password
 from omok_server.db.models import User
 from omok_server.schemas import AuthCredentials, AuthResponse, UserSummary
+from omok_server.ws.registry import registry as ws_registry
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -54,7 +55,7 @@ def register(
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(
+async def login(
     body: AuthCredentials,
     session: Annotated[Session, Depends(get_db_session)],
 ) -> AuthResponse:
@@ -70,6 +71,10 @@ def login(
     session.add(user)
     session.commit()
     session.refresh(user)
+    # Close any WS that the previous token still holds open across all 3
+    # channels (lobby / room / game) so the displaced session disconnects
+    # immediately instead of waiting for its next inbound message.
+    await ws_registry.close_all(user.id, code=4401)
     return AuthResponse(
         access_token=create_access_token(user.id, token_version=user.token_version),
         user=_summary_with_room(user),

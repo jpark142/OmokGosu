@@ -90,11 +90,15 @@ export default function Chat({
               );
             }
             const isMe = user?.id === m.user_id;
+            const isSpectator = m.role === "spectator";
             return (
               <div key={i} className="flex gap-2 items-baseline">
                 <span className="text-[10px] text-stone-400 w-14 shrink-0 font-mono">
                   {formatTime(m.server_time_ms)}
                 </span>
+                {isSpectator && (
+                  <span className="text-[10px] font-semibold text-sky-600 shrink-0">[관전]</span>
+                )}
                 <Link
                   to={`/users/${m.user_id}`}
                   className={`shrink-0 truncate max-w-[8rem] ${

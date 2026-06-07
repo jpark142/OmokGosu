@@ -34,6 +34,7 @@ from omok_server.schemas import (
     STimerTickMsg,
 )
 from omok_server.services.stats import record_match
+from omok_server.ws.registry import registry as ws_registry
 
 router = APIRouter()
 
@@ -222,17 +223,24 @@ async def game_ws(ws: WebSocket, game_id: str):
         await ws.close(code=4404)
         return
 
-    # Authorization: this user must be a participant. AI games allow only the
-    # one human participant. HVH games allow either user_id assigned to the session.
+    # Authorization: players see the game read-write; everyone else joins as
+    # a live spectator (chat-only). AI games still allow the single human
+    # participant as a player; a third party is a spectator.
     participant_ids = {info.user_id for info in session.players.values() if info.user_id is not None}
-    if participant_ids and user.id not in participant_ids:
-        await ws.close(code=4403)
-        return
+    is_spectator = bool(participant_ids) and user.id not in participant_ids
 
     await ws.accept()
     bus = _bus_for(game_id)
     bus.sockets.add(ws)
+    await ws_registry.register(user.id, ws)
+    newly_joined_spectator = False
+    if is_spectator:
+        async with session.lock:
+            newly_joined_spectator = session.add_spectator(user.id, user.username, ws)
     await _send_json(ws, session.to_state_msg())
+    if newly_joined_spectator:
+        # Tell the players + other spectators a new viewer arrived.
+        await _broadcast(game_id, session.to_state_msg())
     # Recent chat history for this game — only when non-empty.
     history = chat_helpers.history_for(f"game:{game_id}")
     if history is not None:
@@ -263,9 +271,13 @@ async def game_ws(ws: WebSocket, game_id: str):
                     user=user,
                     text=msg.get("text", ""),
                     broadcast=lambda p: _broadcast(game_id, p),
+                    role="spectator" if is_spectator else "player",
                 )
                 if result == chat_helpers.ChatResult.RATE_LIMITED:
                     await _send_json(ws, SErrorMsg(message="잠시 후 다시 시도하세요."))
+                continue
+            if is_spectator and mtype in ("move", "resign"):
+                await _send_json(ws, SErrorMsg(message="관전자는 조작할 수 없습니다"))
                 continue
             if mtype == "resign":
                 color_str = msg.get("color")
@@ -310,6 +322,12 @@ async def game_ws(ws: WebSocket, game_id: str):
         pass
     finally:
         bus.sockets.discard(ws)
+        await ws_registry.unregister(user.id, ws)
+        if is_spectator:
+            async with session.lock:
+                spectator_left = session.remove_spectator(user.id, ws)
+            if spectator_left:
+                await _broadcast(game_id, session.to_state_msg())
         if not bus.sockets and bus.ticker_task is not None:
             bus.ticker_task.cancel()
             bus.ticker_task = None

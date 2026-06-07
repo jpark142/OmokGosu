@@ -18,6 +18,7 @@ const REASON_LABEL: Record<GameOverReason, string> = {
   RESIGN: "기권",
   TIMEOUT: "시간패",
   DRAW: "무승부",
+  ABORTED: "무효",
 };
 
 function formatRelative(secondsAgo: number): string {
@@ -41,7 +42,7 @@ function PlayerChip({
 }: {
   name: string;
   color: string;            // "흑" / "백"
-  result: "win" | "loss" | "draw";
+  result: "win" | "loss" | "draw" | "void";
   isSelf?: boolean;
   isAi?: boolean;
 }) {
@@ -55,12 +56,16 @@ function PlayerChip({
   const nameClass = isAi
     ? "bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium"
     : `${isSelf ? "font-semibold text-stone-900" : "text-stone-700"} truncate`;
+  const resultLabel =
+    result === "win" ? "승" :
+    result === "loss" ? "패" :
+    result === "draw" ? "무" : "무효";
   return (
     <span className="inline-flex items-center gap-1 min-w-0">
       <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${stoneColor}`} />
       <span className={nameClass}>{name}</span>
       <span className={`text-xs ${resultClass} shrink-0`}>
-        ({result === "win" ? "승" : result === "loss" ? "패" : "무"})
+        ({resultLabel})
       </span>
     </span>
   );
@@ -200,31 +205,38 @@ export default function UserProfile() {
                 const oppName = m.is_ai_game
                   ? "AI"
                   : (m.opponent_username ?? "(탈퇴한 유저)");
-                const myResult = m.is_draw ? "draw" : m.you_won ? "win" : "loss";
-                const oppResult = m.is_draw ? "draw" : m.you_won ? "loss" : "win";
+                const sideResult: "win" | "loss" | "draw" | "void" =
+                  m.is_aborted ? "void"
+                  : m.is_draw ? "draw"
+                  : m.you_won ? "win"
+                  : "loss";
+                const myResult = sideResult;
+                const oppResult: "win" | "loss" | "draw" | "void" =
+                  m.is_aborted ? "void"
+                  : m.is_draw ? "draw"
+                  : m.you_won ? "loss"
+                  : "win";
+                const stripeClass =
+                  m.is_aborted ? "bg-stone-300"
+                  : m.is_draw ? "bg-stone-400"
+                  : m.you_won ? "bg-green-500"
+                  : "bg-red-400";
+                const headerClass =
+                  m.is_aborted || m.is_draw ? "text-stone-600"
+                  : m.you_won ? "text-green-700"
+                  : "text-red-600";
+                const headerLabel =
+                  m.is_aborted ? "무효"
+                  : m.is_draw ? "무"
+                  : m.you_won ? "승"
+                  : "패";
                 return (
                   <li key={m.match_id} className="border-t border-stone-100 first:border-t-0">
                     <div className="flex items-center gap-3 px-4 py-2 text-sm">
                       {/* W/L/D badge — colored stripe + label */}
-                      <span
-                        className={`inline-block w-1.5 h-6 rounded shrink-0 ${
-                          m.is_draw
-                            ? "bg-stone-400"
-                            : m.you_won
-                              ? "bg-green-500"
-                              : "bg-red-400"
-                        }`}
-                      />
-                      <span
-                        className={`font-semibold w-6 shrink-0 ${
-                          m.is_draw
-                            ? "text-stone-600"
-                            : m.you_won
-                              ? "text-green-700"
-                              : "text-red-600"
-                        }`}
-                      >
-                        {m.is_draw ? "무" : m.you_won ? "승" : "패"}
+                      <span className={`inline-block w-1.5 h-6 rounded shrink-0 ${stripeClass}`} />
+                      <span className={`font-semibold shrink-0 ${m.is_aborted ? "w-10" : "w-6"} ${headerClass}`}>
+                        {headerLabel}
                       </span>
 
                       {/* Players: me vs opponent with color + result chips */}

@@ -112,17 +112,19 @@ def recent_matches(
         else:
             opp = session.get(User, opponent_id)
             opponent_name = opp.username if opp is not None else None
-        # Distinguish draw from loss-to-AI: both have winner_user_id=NULL but
-        # only the former is over_reason=DRAW.
+        # Distinguish draw, aborted, and loss-to-AI: all three can have
+        # winner_user_id=NULL, but only over_reason disambiguates.
         is_draw = m.over_reason == GameOverReason.DRAW.value
+        is_aborted = m.over_reason == GameOverReason.ABORTED.value
         out.append(
             MatchSummary(
                 match_id=m.id,
                 opponent_username=opponent_name,
                 opponent_user_id=opponent_id,
                 your_color=your_color,
-                you_won=(not is_draw and m.winner_user_id == user_id),
+                you_won=(not is_draw and not is_aborted and m.winner_user_id == user_id),
                 is_draw=is_draw,
+                is_aborted=is_aborted,
                 over_reason=GameOverReason(m.over_reason),
                 is_ai_game=m.is_ai_game,
                 ended_at=m.ended_at.timestamp(),

@@ -13,6 +13,7 @@ from omok_server.api.rooms import room_to_summary
 from omok_server.db.engine import engine
 from omok_server.game.room_manager import room_manager
 from omok_server.schemas import SPongMsg
+from omok_server.ws.registry import registry as ws_registry
 
 router = APIRouter()
 
@@ -48,6 +49,7 @@ async def lobby_ws(ws: WebSocket):
 
     await ws.accept()
     _bus.sockets.add(ws)
+    await ws_registry.register(user.id, ws)
     # Initial snapshot of the current room list.
     with Session(engine) as db:
         payload = {
@@ -90,3 +92,4 @@ async def lobby_ws(ws: WebSocket):
         pass
     finally:
         _bus.sockets.discard(ws)
+        await ws_registry.unregister(user.id, ws)

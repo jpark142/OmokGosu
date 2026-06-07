@@ -14,6 +14,7 @@ const OVER_REASON_LABEL: Record<GameOverReason, string> = {
   RESIGN: "기권",
   TIMEOUT: "시간패",
   DRAW: "무승부",
+  ABORTED: "무효",
 };
 
 function formatRelative(secondsAgo: number): string {
@@ -126,23 +127,25 @@ export default function UserHoverCard({ userId, children }: Props) {
                   >
                     <span
                       className={`inline-block w-1 h-4 rounded ${
-                        m.is_draw
-                          ? "bg-stone-400"
-                          : m.you_won
-                            ? "bg-green-500"
-                            : "bg-red-400"
+                        m.is_aborted
+                          ? "bg-stone-300"
+                          : m.is_draw
+                            ? "bg-stone-400"
+                            : m.you_won
+                              ? "bg-green-500"
+                              : "bg-red-400"
                       }`}
                     />
                     <span
-                      className={`font-semibold w-7 ${
-                        m.is_draw
+                      className={`font-semibold ${m.is_aborted ? "w-10" : "w-7"} ${
+                        m.is_aborted || m.is_draw
                           ? "text-stone-600"
                           : m.you_won
                             ? "text-green-700"
                             : "text-red-600"
                       }`}
                     >
-                      {m.is_draw ? "무" : m.you_won ? "승" : "패"}
+                      {m.is_aborted ? "무효" : m.is_draw ? "무" : m.you_won ? "승" : "패"}
                     </span>
                     <span className="text-stone-700 truncate flex-1 flex items-center gap-1 min-w-0">
                       {m.is_ai_game ? (

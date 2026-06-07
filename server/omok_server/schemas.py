@@ -43,6 +43,9 @@ class GameOverReason(str, Enum):
     RESIGN = "RESIGN"
     TIMEOUT = "TIMEOUT"
     DRAW = "DRAW"
+    # Resignation before any stone is placed. Match row is kept for history
+    # but no winner is recorded and wins/losses/draws are not affected.
+    ABORTED = "ABORTED"
 
 
 class ForbiddenReason(str, Enum):
@@ -82,6 +85,18 @@ class PlayerInfo(BaseModel):
     wins: int | None = None     # populated by session.to_state_msg via DB lookup
     losses: int | None = None
     draws: int | None = None
+    rank: int | None = None     # global leaderboard rank (None if 0 decided games)
+
+
+class SpectatorInfo(BaseModel):
+    """A live spectator on a game WS — read-only viewer, chat allowed.
+    Stats are hydrated by session.to_state_msg via the same DB lookup."""
+    user_id: int
+    username: str
+    wins: int | None = None
+    losses: int | None = None
+    draws: int | None = None
+    rank: int | None = None
 
 
 class ClockSnapshot(BaseModel):
@@ -141,6 +156,10 @@ class MatchSummary(BaseModel):
     # The client should prefer this over `you_won` when deciding what label
     # to render — a draw is neither a win nor a loss.
     is_draw: bool = False
+    # True when the game was aborted before any stone was placed (a player
+    # resigned at move 0). Like draws, neither side counts as winner/loser
+    # and the row is labeled "무효".
+    is_aborted: bool = False
     over_reason: GameOverReason
     is_ai_game: bool
     ended_at: float  # unix timestamp (seconds)
@@ -227,12 +246,15 @@ class RoomSummary(BaseModel):
     guest: RoomMemberSummary | None
     status: RoomStatusStr
     created_at: float
+    # Populated only when status == "PLAYING". Drives the "관전하기" button on
+    # RoomCard so the lobby can navigate the user straight into the game WS
+    # without an extra REST roundtrip for RoomDetail.
+    current_game_id: str | None = None
 
 
 class RoomDetail(RoomSummary):
     """Room state from inside the room (members + readiness)."""
     guest_ready: bool
-    current_game_id: str | None = None
     games_played: int = 0  # drives "한 판 더" CTA on rematch
 
 
@@ -306,6 +328,10 @@ class SChatMsg(BaseModel):
     text: str
     server_time_ms: int
     is_system: bool = False          # True → rendered differently by the client
+    # Role drives display: spectators get a "[관전]" prefix in the chat UI.
+    # System messages keep role="player" — is_system already routes them
+    # through a separate render path. Default kept for backward compat.
+    role: Literal["player", "spectator"] = "player"
 
 
 class SChatHistoryMsg(BaseModel):
@@ -352,6 +378,7 @@ class SStateMsg(BaseModel):
     forbidden_squares: list[tuple[int, int]] = Field(default_factory=list)
     clocks: ClocksSnapshot
     players: dict[ColorStr, PlayerInfo]
+    spectators: list[SpectatorInfo] = Field(default_factory=list)
     status: GameStatus
     server_time_ms: int
 

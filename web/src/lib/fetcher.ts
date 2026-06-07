@@ -93,3 +93,17 @@ export const http = {
   post: <T,>(path: string, body?: Json) => request<T>("POST",   path, body ?? {}),
   del:  <T,>(path: string)              => request<T>("DELETE", path),
 };
+
+/** Called from every WS hook's onclose when code === 4401. Mirrors the REST
+ * 401 path: drops the token and dispatches the unauthorized event so
+ * AuthProvider can show the displaced toast and route-guards take over.
+ * Suppressed within ~3s of a fresh login so the server-side close that retires
+ * the *previous* token doesn't kick the new session out. */
+export function handleWsUnauthorized(): void {
+  const sentinel = (window as unknown as { __omokJustLoggedInAt?: number }).__omokJustLoggedInAt;
+  if (sentinel && Date.now() - sentinel < 3000) return;
+  setToken(null);
+  window.dispatchEvent(
+    new CustomEvent("omok:unauthorized", { detail: { reason: "session displaced" } }),
+  );
+}

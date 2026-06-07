@@ -4,7 +4,13 @@ export type ColorStr = "BLACK" | "WHITE";
 export type GameMode = "hvh" | "hva";
 export type AILevel = "random" | "smart" | "minimax" | "heuristic" | "alphazero";
 export type GameStatus = "IN_PROGRESS" | "OVER";
-export type GameOverReason = "FIVE" | "OVERLINE_WIN" | "RESIGN" | "TIMEOUT" | "DRAW";
+export type GameOverReason =
+  | "FIVE"
+  | "OVERLINE_WIN"
+  | "RESIGN"
+  | "TIMEOUT"
+  | "DRAW"
+  | "ABORTED";  // resign before move 1 — kept in history but no stat impact
 export type ForbiddenReason =
   | "DOUBLE_THREE"
   | "DOUBLE_FOUR"
@@ -28,6 +34,16 @@ export interface PlayerInfo {
   wins?: number | null;
   losses?: number | null;
   draws?: number | null;
+  rank?: number | null;
+}
+
+export interface SpectatorInfo {
+  user_id: number;
+  username: string;
+  wins?: number | null;
+  losses?: number | null;
+  draws?: number | null;
+  rank?: number | null;
 }
 
 // ---------- Auth (Phase 3A) ----------
@@ -51,6 +67,9 @@ export interface MatchSummary {
   // when picking a win/loss/draw label; you_won is false for both losses
   // and draws but only is_draw distinguishes the two.
   is_draw?: boolean;
+  // True when the game was resigned before any stone was placed. Like draws
+  // it neither counts as win nor loss; the row is rendered as "무효".
+  is_aborted?: boolean;
   over_reason: GameOverReason;
   is_ai_game: boolean;
   ended_at: number;  // unix seconds
@@ -127,11 +146,13 @@ export interface RoomSummary {
   guest: RoomMemberSummary | null;
   status: RoomStatusStr;
   created_at: number;
+  // Populated only when status === "PLAYING". Drives the spectate button on
+  // RoomCard so the lobby can jump straight into the game WS.
+  current_game_id?: string | null;
 }
 
 export interface RoomDetail extends RoomSummary {
   guest_ready: boolean;
-  current_game_id: string | null;
   games_played: number;
 }
 
@@ -171,6 +192,9 @@ export interface ChatMessage {
   text: string;
   server_time_ms: number;
   is_system?: boolean;
+  // "player" for participants, "spectator" for live game viewers. System
+  // messages keep the default — is_system already routes them separately.
+  role?: "player" | "spectator";
 }
 
 export interface ChatHistoryEnvelope {
@@ -237,6 +261,7 @@ export interface SStateMsg {
   forbidden_squares: [number, number][];
   clocks: ClocksSnapshot;
   players: Record<ColorStr, PlayerInfo>;
+  spectators?: SpectatorInfo[];
   status: GameStatus;
   server_time_ms: number;
 }

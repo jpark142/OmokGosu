@@ -11,6 +11,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from typing import TYPE_CHECKING
+
 from omok_server.game.clock import GameClock, now_monotonic_ms
 from omok_server.game.engine import Engine
 from omok_server.schemas import (
@@ -22,9 +24,22 @@ from omok_server.schemas import (
     GameStatus,
     PlayerInfo,
     PlayerKind,
+    SpectatorInfo,
     SStateMsg,
     Stone,
 )
+
+if TYPE_CHECKING:
+    from fastapi import WebSocket
+
+
+@dataclass
+class _SpectatorEntry:
+    """Per-spectator bookkeeping inside a GameSession. We track sockets as a
+    set so a single user opening the game in two tabs counts as one spectator
+    in the broadcast UI; the entry survives until the last tab disconnects."""
+    username: str
+    sockets: set["WebSocket"] = field(default_factory=set)
 
 
 @dataclass
@@ -41,6 +56,10 @@ class GameSession:
     started_at: datetime = field(default_factory=datetime.utcnow)
     recorded_match: bool = False  # set True after services.stats.record_match runs
     recorded_match_id: int | None = None  # the DB id from record_match (for replay link)
+    # Live spectators: user_id → (username, set of WS sockets). Multiple tabs
+    # by the same user share a single dict entry; the entry is removed only
+    # when the last socket disconnects. Capacity is unbounded (see PLAN).
+    spectators: dict[int, "_SpectatorEntry"] = field(default_factory=dict)
 
     @staticmethod
     def new(
@@ -124,24 +143,77 @@ class GameSession:
     def is_over(self) -> bool:
         return self.status == GameStatus.OVER
 
-    def to_state_msg(self) -> SStateMsg:
-        # Hydrate player stats from DB on each snapshot. Cheap: at most 2 rows.
-        # Lazy import to avoid circular dependency (services.stats imports GameSession).
-        from omok_server.services.stats import fetch_user_stats
+    # ----- spectators -----
 
-        user_ids = [info.user_id for info in self.players.values() if info.user_id is not None]
-        stats_map = fetch_user_stats(user_ids) if user_ids else {}
+    def is_player(self, user_id: int) -> bool:
+        return any(
+            info.user_id == user_id
+            for info in self.players.values()
+            if info.user_id is not None
+        )
+
+    def add_spectator(self, user_id: int, username: str, ws: "WebSocket") -> bool:
+        """Register a WS as a spectator. Returns True if this is a *newly
+        visible* spectator (i.e. first socket for this user) — callers use
+        that to decide whether to rebroadcast state."""
+        entry = self.spectators.get(user_id)
+        if entry is None:
+            entry = _SpectatorEntry(username=username)
+            self.spectators[user_id] = entry
+            entry.sockets.add(ws)
+            return True
+        entry.sockets.add(ws)
+        return False
+
+    def remove_spectator(self, user_id: int, ws: "WebSocket") -> bool:
+        """Unregister a WS. Returns True if the spectator just left entirely
+        (last socket dropped) so the broadcast list shrinks."""
+        entry = self.spectators.get(user_id)
+        if entry is None:
+            return False
+        entry.sockets.discard(ws)
+        if not entry.sockets:
+            self.spectators.pop(user_id, None)
+            return True
+        return False
+
+    def to_state_msg(self) -> SStateMsg:
+        # Hydrate player + spectator stats + rank from DB on each snapshot.
+        # Lazy import to avoid circular dep (services.stats imports GameSession).
+        from omok_server.services.stats import fetch_user_ranks, fetch_user_stats
+
+        player_ids = [info.user_id for info in self.players.values() if info.user_id is not None]
+        spec_ids = list(self.spectators.keys())
+        all_ids = player_ids + spec_ids
+        stats_map = fetch_user_stats(all_ids) if all_ids else {}
+        rank_map = fetch_user_ranks(all_ids) if all_ids else {}
 
         hydrated: dict[ColorStr, PlayerInfo] = {}
         for color, info in self.players.items():
             stats = stats_map.get(info.user_id) if info.user_id is not None else None
+            rank = rank_map.get(info.user_id) if info.user_id is not None else None
             if stats is not None:
                 wins, losses, draws = stats
                 hydrated[color] = info.model_copy(
-                    update={"wins": wins, "losses": losses, "draws": draws}
+                    update={"wins": wins, "losses": losses, "draws": draws, "rank": rank}
                 )
             else:
                 hydrated[color] = info
+
+        spectators: list[SpectatorInfo] = []
+        for uid, entry in self.spectators.items():
+            stats = stats_map.get(uid)
+            wins, losses, draws = stats if stats is not None else (None, None, None)
+            spectators.append(
+                SpectatorInfo(
+                    user_id=uid,
+                    username=entry.username,
+                    wins=wins,
+                    losses=losses,
+                    draws=draws,
+                    rank=rank_map.get(uid),
+                )
+            )
 
         return SStateMsg(
             game_id=self.game_id,
@@ -157,6 +229,7 @@ class GameSession:
                 white=self.clock.live_snapshot_for(ColorStr.WHITE),
             ),
             players=hydrated,
+            spectators=spectators,
             status=self.status,
             server_time_ms=int(time.time() * 1000),
         )
@@ -208,6 +281,13 @@ class GameSession:
         if self.is_over():
             return
         self.status = GameStatus.OVER
+        # No stones placed yet → treat as aborted: no winner, no stat impact.
+        # The Match row is still written so the participants can see "(무효)"
+        # in their history, but wins/losses/draws stay put.
+        if self.engine.move_number == 0:
+            self.winner = None
+            self.over_reason = GameOverReason.ABORTED
+            return
         self.winner = ColorStr.WHITE if color == ColorStr.BLACK else ColorStr.BLACK
         self.over_reason = GameOverReason.RESIGN
 

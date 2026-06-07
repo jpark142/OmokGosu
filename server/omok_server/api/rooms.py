@@ -52,6 +52,7 @@ def room_to_summary(room: Room, session: Session) -> RoomSummary:
         guest=guest,
         status=RoomStatusStr(room.status.value),
         created_at=room.created_at,
+        current_game_id=room.current_game_id,
     )
 
 
@@ -60,7 +61,6 @@ def room_to_detail(room: Room, session: Session) -> RoomDetail:
     return RoomDetail(
         **summary.model_dump(),
         guest_ready=room.guest_ready,
-        current_game_id=room.current_game_id,
         games_played=room.games_played,
     )
 

@@ -18,6 +18,7 @@ const REASON_LABEL: Record<GameOverReason, string> = {
   RESIGN: "기권",
   TIMEOUT: "시간패",
   DRAW: "판 가득 (무승부)",
+  ABORTED: "무효 (대국 시작 전 기권)",
 };
 
 export default function MatchReplay() {
@@ -95,11 +96,13 @@ export default function MatchReplay() {
   }
 
   const winnerLabel =
-    match.winner_color === null
-      ? "무승부"
-      : match.winner_color === "BLACK"
-        ? `흑 (${match.black_username ?? "?"}) 승`
-        : `백 (${match.white_username ?? "?"}) 승`;
+    match.over_reason === "ABORTED"
+      ? "무효"
+      : match.winner_color === null
+        ? "무승부"
+        : match.winner_color === "BLACK"
+          ? `흑 (${match.black_username ?? "?"}) 승`
+          : `백 (${match.white_username ?? "?"}) 승`;
 
   const blackLabel = `흑: ${match.black_username ?? "?"}`;
   const whiteLabel = `백: ${match.white_username ?? "?"}`;

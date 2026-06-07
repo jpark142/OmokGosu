@@ -86,6 +86,41 @@ def test_record_match_hva_loss_does_not_change_stats() -> None:
         assert refreshed.wins == 0 and refreshed.losses == 0
 
 
+def test_record_match_aborted_writes_row_but_no_stat_changes() -> None:
+    """Aborted (move-0 resign) writes the Match row for history but does NOT
+    bump wins/losses/draws — the game is treated as if it never happened
+    for ranking purposes."""
+    uid_a = _make_user(_u())
+    uid_b = _make_user(_u())
+    s = GameSession.new(
+        mode=GameMode.HVH,
+        human_name="alice",
+        human_user_id=uid_a,
+        guest_name="bob",
+        guest_user_id=uid_b,
+    )
+    # Simulate the abort.
+    s.resign(ColorStr.BLACK)
+    from omok_server.schemas import GameOverReason
+    assert s.over_reason == GameOverReason.ABORTED
+    assert s.winner is None
+
+    result = record_match(s, started_at=datetime.utcnow())
+    assert result.match_id is not None
+    # No stats_updates broadcast — neither user moved.
+    assert result.stats_updates == []
+
+    with Session(engine) as db:
+        m = db.exec(select(Match).where(Match.id == result.match_id)).first()
+        assert m is not None
+        assert m.over_reason == "ABORTED"
+        assert m.winner_user_id is None
+        a = db.exec(select(User).where(User.id == uid_a)).first()
+        b = db.exec(select(User).where(User.id == uid_b)).first()
+        assert a.wins == 0 and a.losses == 0 and a.draws == 0
+        assert b.wins == 0 and b.losses == 0 and b.draws == 0
+
+
 def test_record_match_draw_records_match_and_bumps_draws() -> None:
     """A draw inserts the Match and bumps each human's draws (but never
     wins/losses) — draws show up in 전적 but are excluded from win rate."""

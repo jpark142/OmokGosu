@@ -59,12 +59,24 @@ def test_apply_move_ends_game_on_black_five() -> None:
     assert gs.over_reason == GameOverReason.FIVE
 
 
-def test_resign_ends_game() -> None:
+def test_resign_after_first_move_ends_game() -> None:
+    gs = GameSession.new()
+    # Place a stone so the game actually started; otherwise resign aborts it.
+    gs.apply_move(7, 7, ColorStr.BLACK)
+    gs.resign(ColorStr.WHITE)
+    assert gs.status == GameStatus.OVER
+    assert gs.winner == ColorStr.BLACK
+    assert gs.over_reason == GameOverReason.RESIGN
+
+
+def test_resign_at_move_zero_aborts_game() -> None:
+    """Resign before any stone has been placed → ABORTED, no winner. Match
+    row will still be written but wins/losses/draws stay untouched."""
     gs = GameSession.new()
     gs.resign(ColorStr.BLACK)
     assert gs.status == GameStatus.OVER
-    assert gs.winner == ColorStr.WHITE
-    assert gs.over_reason == GameOverReason.RESIGN
+    assert gs.winner is None
+    assert gs.over_reason == GameOverReason.ABORTED
 
 
 def test_state_msg_includes_forbidden_squares_when_black_to_move() -> None:

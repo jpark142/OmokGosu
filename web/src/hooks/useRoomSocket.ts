@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { getToken } from "@/lib/fetcher";
+import { getToken, handleWsUnauthorized } from "@/lib/fetcher";
 import { CLIENT_VERSION } from "@/lib/version";
 import type {
   ChatMessage,
@@ -62,10 +62,10 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
           else if (msg.type === "kicked") setKickedUserId(msg.user_id);
           else if (msg.type === "chat_history") setChat(msg.messages);
           else if (msg.type === "chat") {
-            const { user_id, username, text, server_time_ms, is_system } = msg;
+            const { user_id, username, text, server_time_ms, is_system, role } = msg;
             setChat((prev) => [
               ...prev,
-              { user_id, username, text, server_time_ms, is_system },
+              { user_id, username, text, server_time_ms, is_system, role },
             ]);
           }
           for (const l of listenersRef.current) l(msg);
@@ -80,7 +80,11 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
           window.dispatchEvent(new CustomEvent("omok:upgrade-required"));
           return;
         }
-        if (ev.code === 4401 || ev.code === 4403 || ev.code === 4404) return;
+        if (ev.code === 4401) {
+          handleWsUnauthorized();
+          return;
+        }
+        if (ev.code === 4403 || ev.code === 4404) return;
         setTimeout(connect, backoff);
         backoff = Math.min(backoff * 2, 8000);
       };

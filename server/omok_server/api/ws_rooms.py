@@ -23,6 +23,7 @@ from omok_server.game.manager import manager as game_manager
 from omok_server.game.room_manager import room_manager
 from omok_server.game.session import GameSession
 from omok_server.schemas import GameMode, SErrorMsg, SPongMsg
+from omok_server.ws.registry import registry as ws_registry
 
 router = APIRouter()
 
@@ -96,6 +97,7 @@ async def room_ws(ws: WebSocket, room_id: str):
     await ws.accept()
     bus = _bus_for(room_id)
     bus.sockets.add(ws)
+    await ws_registry.register(user.id, ws)
     await _send_room_state(room_id, target_ws=ws)
     # Recent chat history (room-scoped) — only when non-empty.
     history = chat_helpers.history_for(f"room:{room_id}")
@@ -242,3 +244,4 @@ async def room_ws(ws: WebSocket, room_id: str):
         pass
     finally:
         bus.sockets.discard(ws)
+        await ws_registry.unregister(user.id, ws)

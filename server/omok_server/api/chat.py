@@ -96,10 +96,14 @@ async def handle_incoming_chat(
     user: User,
     text: str,
     broadcast: Callable[[dict], Awaitable[None]],
+    role: str = "player",
 ) -> ChatResult:
     """Validate, append, and broadcast. Returns the outcome so callers can
     decide whether to notify the offender (e.g., RATE_LIMITED → send error
-    back to just the sender's socket)."""
+    back to just the sender's socket).
+
+    `role` is "player" for lobby/room/game participants and "spectator" for
+    live game viewers — the frontend uses it to render a "[관전]" prefix."""
     text = (text or "").strip()
     if not text:
         return ChatResult.EMPTY
@@ -114,6 +118,7 @@ async def handle_incoming_chat(
         username=user.username,
         text=text,
         server_time_ms=int(time.time() * 1000),
+        role=role,
     ).model_dump()
 
     _key_buffer(key).append(payload)
