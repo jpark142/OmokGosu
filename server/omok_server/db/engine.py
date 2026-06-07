@@ -64,6 +64,13 @@ def _run_inline_migrations() -> None:
             ))
             conn.commit()
 
+        user_cols = {row[1] for row in conn.execute(text("PRAGMA table_info('user')"))}
+        if "token_version" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE user ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"
+            ))
+            conn.commit()
+
 
 def get_session() -> Session:
     """FastAPI dependency / context manager helper. Caller is responsible for

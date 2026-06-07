@@ -87,3 +87,43 @@ def test_login_returns_current_room_id(client) -> None:
     # Login again — should surface the existing room.
     r2 = client.post("/api/auth/login", json={"username": username, "password": "pw1234"})
     assert r2.json()["user"]["current_room_id"] == rid
+
+
+def test_relogin_invalidates_previous_token(client) -> None:
+    """The newer login should retire the older token (single-session policy)."""
+    username = _u()
+    client.post("/api/auth/register", json={"username": username, "password": "pw1234"})
+
+    r1 = client.post("/api/auth/login", json={"username": username, "password": "pw1234"})
+    tok1 = r1.json()["access_token"]
+
+    # Old token still works right after first login.
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {tok1}"}).status_code == 200
+
+    # Second login from "another device" — old token must now be rejected.
+    r2 = client.post("/api/auth/login", json={"username": username, "password": "pw1234"})
+    tok2 = r2.json()["access_token"]
+    assert tok2 != tok1
+
+    stale = client.get("/api/auth/me", headers={"Authorization": f"Bearer {tok1}"})
+    assert stale.status_code == 401
+    assert stale.json()["detail"] == "session displaced"
+
+    # New token works.
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {tok2}"}).status_code == 200
+
+
+def test_register_then_relogin_invalidates_register_token(client) -> None:
+    """The convenience token from /register is invalidated by the first /login."""
+    username = _u()
+    r0 = client.post("/api/auth/register", json={"username": username, "password": "pw1234"})
+    register_tok = r0.json()["access_token"]
+    # Register-issued token works.
+    assert client.get(
+        "/api/auth/me", headers={"Authorization": f"Bearer {register_tok}"}
+    ).status_code == 200
+    # First subsequent login retires it.
+    client.post("/api/auth/login", json={"username": username, "password": "pw1234"})
+    assert client.get(
+        "/api/auth/me", headers={"Authorization": f"Bearer {register_tok}"}
+    ).status_code == 401

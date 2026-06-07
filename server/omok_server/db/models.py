@@ -14,6 +14,11 @@ class User(SQLModel, table=True):
     wins: int = Field(default=0)
     losses: int = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    # Bumped on every successful login. The current JWT carries this as its
+    # `ver` claim; auth deps reject tokens whose ver doesn't match. This is
+    # how "new login invalidates previous session" is enforced without
+    # tracking individual tokens.
+    token_version: int = Field(default=0)
 
 
 class Match(SQLModel, table=True):

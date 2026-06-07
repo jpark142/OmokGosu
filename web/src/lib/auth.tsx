@@ -61,7 +61,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Global 401 handler: drop user, redirect handled by route guards.
   useEffect(() => {
-    const onUnauthorized = () => {
+    const onUnauthorized = (ev: Event) => {
+      const reason = (ev as CustomEvent<{ reason?: string }>).detail?.reason;
+      if (reason === "session displaced") {
+        toast.error("다른 곳에서 로그인되어 자동 로그아웃되었습니다.");
+      }
       setUser(null);
       setTokenState(null);
     };

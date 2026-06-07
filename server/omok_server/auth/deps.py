@@ -39,16 +39,26 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     try:
-        user_id = decode_access_token(token)
+        payload = decode_access_token(token)
     except TokenError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
             headers={"WWW-Authenticate": "Bearer"},
         ) from e
-    user = session.exec(select(User).where(User.id == user_id)).first()
+    user = session.exec(select(User).where(User.id == payload.user_id)).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user not found")
+    if user.token_version != payload.ver:
+        # Some newer token has been issued for this user — most likely a
+        # second login from another browser/device. Treat the old one as
+        # logged out. The frontend reads this detail to surface a clearer
+        # toast than the generic "expired" message.
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="session displaced",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 
@@ -73,14 +83,20 @@ async def get_current_user_ws(ws: WebSocket) -> User | None:
     """Validate ?token=... on a WebSocket. Returns User or None (after closing)."""
     token = ws.query_params.get("token", "")
     try:
-        user_id = decode_access_token(token)
+        payload = decode_access_token(token)
     except TokenError:
         # Custom close code 4401 = "unauthorized"; WebSocket spec reserves 4000-4999 for app use.
         await ws.close(code=4401)
         return None
     with Session(engine) as session:
-        user = session.exec(select(User).where(User.id == user_id)).first()
+        user = session.exec(select(User).where(User.id == payload.user_id)).first()
     if user is None:
+        await ws.close(code=4401)
+        return None
+    if user.token_version != payload.ver:
+        # Another login has retired this token. The frontend's WS hooks
+        # treat 4401 as terminal (no reconnect), and the next REST call
+        # will dispatch omok:unauthorized which redirects to /login.
         await ws.close(code=4401)
         return None
     return user

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -47,10 +48,13 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int, extra: Optional[dict] = None) -> str:
+def create_access_token(
+    user_id: int, token_version: int = 0, extra: Optional[dict] = None
+) -> str:
     now = datetime.now(tz=timezone.utc)
     payload = {
         "sub": str(user_id),
+        "ver": int(token_version),
         "iat": int(now.timestamp()),
         "exp": int((now + _TOKEN_TTL).timestamp()),
     }
@@ -63,8 +67,17 @@ class TokenError(Exception):
     """Token missing, malformed, or expired."""
 
 
-def decode_access_token(token: str) -> int:
-    """Return user_id encoded in the token, or raise TokenError."""
+@dataclass(frozen=True)
+class TokenPayload:
+    user_id: int
+    # `ver` matches User.token_version at issue time. Auth deps compare this
+    # to the current DB value; mismatch means the user logged in elsewhere
+    # since this token was issued and we should reject it.
+    ver: int
+
+
+def decode_access_token(token: str) -> TokenPayload:
+    """Return decoded token payload, or raise TokenError."""
     if not token:
         raise TokenError("missing token")
     try:
@@ -77,6 +90,16 @@ def decode_access_token(token: str) -> int:
     if sub is None:
         raise TokenError("token missing sub claim")
     try:
-        return int(sub)
+        user_id = int(sub)
     except (TypeError, ValueError) as e:
         raise TokenError("token sub not an int") from e
+    # Tokens issued before the token_version mechanism existed have no `ver`
+    # claim; treat as 0 so they still authenticate against fresh users
+    # (token_version starts at 0). Once such a user logs in again, the
+    # bump to 1 will retire any lingering old tokens.
+    ver_raw = payload.get("ver", 0)
+    try:
+        ver = int(ver_raw)
+    except (TypeError, ValueError) as e:
+        raise TokenError("token ver not an int") from e
+    return TokenPayload(user_id=user_id, ver=ver)

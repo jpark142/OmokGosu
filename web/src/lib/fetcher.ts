@@ -51,8 +51,20 @@ async function request<T>(
 
   if (res.status === 401) {
     setToken(null);
-    // Let the caller decide whether to redirect; AuthProvider listens on storage too.
-    window.dispatchEvent(new CustomEvent("omok:unauthorized"));
+    // Peek the body for the server's reason (e.g. "session displaced" when
+    // another login retired this token) so AuthProvider can pick a more
+    // specific toast than the generic "session expired" message.
+    let reason: string | undefined;
+    try {
+      const peek = res.clone();
+      const body = await peek.json();
+      if (body && typeof body === "object" && "detail" in body) {
+        reason = String((body as { detail: unknown }).detail);
+      }
+    } catch {
+      /* no body or not JSON — fall through with reason=undefined */
+    }
+    window.dispatchEvent(new CustomEvent("omok:unauthorized", { detail: { reason } }));
   }
 
   if (res.status === 426) {

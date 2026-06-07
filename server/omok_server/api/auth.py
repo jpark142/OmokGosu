@@ -46,7 +46,10 @@ def register(
     session.add(user)
     session.commit()
     session.refresh(user)
-    return AuthResponse(access_token=create_access_token(user.id), user=_summary_with_room(user))
+    return AuthResponse(
+        access_token=create_access_token(user.id, token_version=user.token_version),
+        user=_summary_with_room(user),
+    )
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -59,7 +62,17 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid username or password"
         )
-    return AuthResponse(access_token=create_access_token(user.id), user=_summary_with_room(user))
+    # Bump first so the issued token is the *only* valid one going forward —
+    # any token previously held by this user (in another tab/device) will
+    # fail the ver check on its next request.
+    user.token_version += 1
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return AuthResponse(
+        access_token=create_access_token(user.id, token_version=user.token_version),
+        user=_summary_with_room(user),
+    )
 
 
 @router.get("/me", response_model=UserSummary)
