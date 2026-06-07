@@ -131,6 +131,13 @@ export default function Lobby() {
                 </div>
               </div>
               <button
+                onClick={() => navigate(`/users/${user.id}`)}
+                className="text-xs text-stone-500 hover:text-stone-900"
+                title="내 전적 + 기보"
+              >
+                🎯 내 전적
+              </button>
+              <button
                 onClick={() => navigate("/leaderboard")}
                 className="text-xs text-stone-500 hover:text-stone-900"
                 title="전체 랭킹"

@@ -30,6 +30,42 @@ function formatRelative(secondsAgo: number): string {
   return `${day}일 전`;
 }
 
+// One side of a match row — username + stone color + W/L/D tint. `isSelf`
+// emphasizes the row owner; `isAi` swaps the visual to the amber AI chip.
+function PlayerChip({
+  name,
+  color,
+  result,
+  isSelf,
+  isAi,
+}: {
+  name: string;
+  color: string;            // "흑" / "백"
+  result: "win" | "loss" | "draw";
+  isSelf?: boolean;
+  isAi?: boolean;
+}) {
+  const stoneColor = color === "흑" ? "bg-stone-900" : "bg-stone-50 border border-stone-300";
+  const resultClass =
+    result === "win"
+      ? "text-green-700"
+      : result === "loss"
+        ? "text-red-600"
+        : "text-stone-500";
+  const nameClass = isAi
+    ? "bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium"
+    : `${isSelf ? "font-semibold text-stone-900" : "text-stone-700"} truncate`;
+  return (
+    <span className="inline-flex items-center gap-1 min-w-0">
+      <span className={`inline-block w-2.5 h-2.5 rounded-full shrink-0 ${stoneColor}`} />
+      <span className={nameClass}>{name}</span>
+      <span className={`text-xs ${resultClass} shrink-0`}>
+        ({result === "win" ? "승" : result === "loss" ? "패" : "무"})
+      </span>
+    </span>
+  );
+}
+
 export default function UserProfile() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -158,52 +194,72 @@ export default function UserProfile() {
             </div>
           ) : (
             <ul>
-              {matches.map((m) => (
-                <li key={m.match_id} className="border-t border-stone-100 first:border-t-0">
-                  <Link
-                    to={`/matches/${m.match_id}`}
-                    className="flex items-center gap-3 px-4 py-2 hover:bg-stone-50 text-sm"
-                  >
-                    <span
-                      className={`inline-block w-1.5 h-5 rounded ${
-                        m.is_draw
-                          ? "bg-stone-400"
-                          : m.you_won
-                            ? "bg-green-500"
-                            : "bg-red-400"
-                      }`}
-                    />
-                    <span
-                      className={`font-semibold w-8 ${
-                        m.is_draw
-                          ? "text-stone-600"
-                          : m.you_won
-                            ? "text-green-700"
-                            : "text-red-600"
-                      }`}
-                    >
-                      {m.is_draw ? "무" : m.you_won ? "승" : "패"}
-                    </span>
-                    <span className="flex-1 truncate flex items-center gap-2 min-w-0">
-                      {m.is_ai_game ? (
-                        <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-medium shrink-0">
-                          vs AI
-                        </span>
-                      ) : (
-                        <span className="truncate">
-                          {m.opponent_username ?? "(탈퇴한 유저)"}
-                        </span>
-                      )}
-                      <span className="text-stone-400 whitespace-nowrap">
-                        · {m.your_color === "BLACK" ? "흑" : "백"}
+              {matches.map((m) => {
+                const myColorLabel = m.your_color === "BLACK" ? "흑" : "백";
+                const oppColorLabel = m.your_color === "BLACK" ? "백" : "흑";
+                const oppName = m.is_ai_game
+                  ? "AI"
+                  : (m.opponent_username ?? "(탈퇴한 유저)");
+                const myResult = m.is_draw ? "draw" : m.you_won ? "win" : "loss";
+                const oppResult = m.is_draw ? "draw" : m.you_won ? "loss" : "win";
+                return (
+                  <li key={m.match_id} className="border-t border-stone-100 first:border-t-0">
+                    <div className="flex items-center gap-3 px-4 py-2 text-sm">
+                      {/* W/L/D badge — colored stripe + label */}
+                      <span
+                        className={`inline-block w-1.5 h-6 rounded shrink-0 ${
+                          m.is_draw
+                            ? "bg-stone-400"
+                            : m.you_won
+                              ? "bg-green-500"
+                              : "bg-red-400"
+                        }`}
+                      />
+                      <span
+                        className={`font-semibold w-6 shrink-0 ${
+                          m.is_draw
+                            ? "text-stone-600"
+                            : m.you_won
+                              ? "text-green-700"
+                              : "text-red-600"
+                        }`}
+                      >
+                        {m.is_draw ? "무" : m.you_won ? "승" : "패"}
                       </span>
-                    </span>
-                    <span className="text-stone-400 text-xs whitespace-nowrap">
-                      {REASON_LABEL[m.over_reason]} · {formatRelative(now - m.ended_at)}
-                    </span>
-                  </Link>
-                </li>
-              ))}
+
+                      {/* Players: me vs opponent with color + result chips */}
+                      <span className="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+                        <PlayerChip
+                          name={profile.username}
+                          color={myColorLabel}
+                          result={myResult}
+                          isSelf
+                        />
+                        <span className="text-stone-300 text-xs">vs</span>
+                        <PlayerChip
+                          name={oppName}
+                          color={oppColorLabel}
+                          result={oppResult}
+                          isAi={m.is_ai_game}
+                        />
+                      </span>
+
+                      {/* Reason + when */}
+                      <span className="text-stone-400 text-xs whitespace-nowrap">
+                        {REASON_LABEL[m.over_reason]} · {formatRelative(now - m.ended_at)}
+                      </span>
+
+                      {/* 기보 button */}
+                      <Link
+                        to={`/matches/${m.match_id}`}
+                        className="text-xs px-2.5 py-1 border border-stone-300 text-stone-700 rounded hover:bg-stone-100 whitespace-nowrap shrink-0"
+                      >
+                        기보 →
+                      </Link>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
