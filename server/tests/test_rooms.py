@@ -22,6 +22,17 @@ def _hdr(tok: str) -> dict:
     return {"Authorization": f"Bearer {tok}"}
 
 
+def _recv_skip_chat(ws):
+    """Drain WS messages until we get something that isn't chat plumbing.
+    System messages from join/leave/ready/start would otherwise interleave
+    with the room_state / room_game_started messages these tests care about."""
+    while True:
+        msg = ws.receive_json()
+        if msg.get("type") in ("chat", "chat_history"):
+            continue
+        return msg
+
+
 def test_create_room_lists_in_lobby(client) -> None:
     host_tok, host = _register(client)
     r = client.post("/api/rooms", json={"title": "alice's room"}, headers=_hdr(host_tok))
@@ -102,20 +113,20 @@ def test_room_ws_start_succeeds_and_creates_game(client) -> None:
 
     # Ready the guest via the WS so the host can start.
     with client.websocket_connect(f"/ws/rooms/{rid}?token={guest_tok}") as guest_ws:
-        guest_ws.receive_json()  # initial state
+        _recv_skip_chat(guest_ws)  # initial state
         guest_ws.send_text(json.dumps({"type": "ready", "value": True}))
-        msg = guest_ws.receive_json()
+        msg = _recv_skip_chat(guest_ws)
         assert msg["type"] == "room_state" and msg["room"]["guest_ready"] is True
 
     # Host connects and starts.
     with client.websocket_connect(f"/ws/rooms/{rid}?token={host_tok}") as host_ws:
-        msg = host_ws.receive_json()
+        msg = _recv_skip_chat(host_ws)
         assert msg["type"] == "room_state" and msg["room"]["guest_ready"] is True
         host_ws.send_text(json.dumps({"type": "start"}))
         game_id = None
         playing = False
-        for _ in range(4):
-            msg = host_ws.receive_json()
+        for _ in range(8):
+            msg = _recv_skip_chat(host_ws)
             if msg["type"] == "room_game_started":
                 game_id = msg["game_id"]
             elif msg["type"] == "room_state" and msg["room"]["status"] == "PLAYING":
@@ -191,9 +202,9 @@ def test_room_ws_start_blocked_until_guest_ready(client) -> None:
     assert client.post(f"/api/rooms/{rid}/join", json={}, headers=_hdr(guest_tok)).status_code == 200
 
     with client.websocket_connect(f"/ws/rooms/{rid}?token={host_tok}") as host_ws:
-        host_ws.receive_json()  # initial state
+        _recv_skip_chat(host_ws)  # initial state
         host_ws.send_text(json.dumps({"type": "start"}))
-        msg = host_ws.receive_json()
+        msg = _recv_skip_chat(host_ws)
         assert msg["type"] == "error"
 
 
@@ -244,7 +255,7 @@ def test_room_ws_only_guest_can_ready(client) -> None:
     client.post(f"/api/rooms/{rid}/join", json={}, headers=_hdr(guest_tok))
 
     with client.websocket_connect(f"/ws/rooms/{rid}?token={host_tok}") as host_ws:
-        host_ws.receive_json()
+        _recv_skip_chat(host_ws)
         host_ws.send_text(json.dumps({"type": "ready", "value": True}))
-        msg = host_ws.receive_json()
+        msg = _recv_skip_chat(host_ws)
         assert msg["type"] == "error"

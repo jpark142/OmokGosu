@@ -92,12 +92,23 @@ export default function UserHoverCard({ userId, children }: Props) {
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      <span className="cursor-help underline decoration-dotted decoration-stone-300 underline-offset-2">
+      <Link
+        to={`/users/${userId}`}
+        className="cursor-pointer underline decoration-dotted decoration-stone-300 underline-offset-2 hover:decoration-stone-500"
+      >
         {children}
-      </span>
+      </Link>
       {open && (
         <div className="absolute z-40 left-0 top-full mt-1 w-72 bg-white border border-stone-200 rounded-md shadow-lg p-3 text-left">
-          <div className="text-xs font-medium text-stone-500 mb-2">최근 경기</div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-medium text-stone-500">최근 경기</div>
+            <Link
+              to={`/users/${userId}`}
+              className="text-xs text-amber-600 hover:text-amber-700"
+            >
+              프로필 →
+            </Link>
+          </div>
           {loading && <div className="text-xs text-stone-400">불러오는 중...</div>}
           {error && <div className="text-xs text-red-500">불러올 수 없습니다</div>}
           {!loading && !error && matches !== null && matches.length === 0 && (

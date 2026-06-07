@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import AIPlayDialog from "@/components/AIPlayDialog";
+import Chat from "@/components/Chat";
 import CreateRoomDialog from "@/components/CreateRoomDialog";
 import RoomCard from "@/components/RoomCard";
 import { useLobbySocket } from "@/hooks/useLobbySocket";
@@ -18,7 +19,7 @@ import type {
 export default function Lobby() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { rooms, connected } = useLobbySocket();
+  const { rooms, connected, chat, sendChat } = useLobbySocket();
   const [createOpen, setCreateOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -184,6 +185,15 @@ export default function Lobby() {
             ))
           )}
         </div>
+
+        {/* Lobby chat — visible to anyone in the lobby */}
+        <Chat
+          title="로비 채팅"
+          messages={chat}
+          onSend={sendChat}
+          disabled={!connected}
+          size="lg"
+        />
 
         <div className="text-xs text-stone-500 text-center border-t pt-4">
           렌주는 흑에게 3-3 / 4-4 / 장목 금수가 적용됩니다. 색은 게임 시작 시 무작위로 배정됩니다.

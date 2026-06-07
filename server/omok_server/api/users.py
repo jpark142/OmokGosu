@@ -1,4 +1,9 @@
-"""User-scoped read endpoints: stats hover card backing data."""
+"""User-scoped read endpoints: profile, leaderboard, recent matches.
+
+Route order matters: `/leaderboard` must be registered BEFORE `/{user_id}`,
+otherwise FastAPI would treat "leaderboard" as a user_id and never match the
+literal path. Same goes for any future fixed paths under `/api/users`.
+"""
 from __future__ import annotations
 
 from typing import Annotated
@@ -15,6 +20,7 @@ from omok_server.schemas import (
     LeaderboardEntry,
     MatchSummary,
     RecentMatches,
+    UserSummary,
 )
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -46,6 +52,33 @@ def leaderboard(
         for i, u in enumerate(rows)
     ]
     return Leaderboard(entries=entries)
+
+
+@router.get("/{user_id}", response_model=UserSummary)
+def get_user(
+    user_id: int,
+    viewer: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_db_session)],
+) -> UserSummary:
+    """Return a single user's stats. Public to any logged-in caller. The
+    `current_room_id` field is only populated when the caller is asking
+    about themselves (privacy: don't reveal another user's location).
+    """
+    from omok_server.game.room_manager import room_manager
+
+    target = session.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    current_room_id = (
+        room_manager.find_room_for_user(target.id) if target.id == viewer.id else None
+    )
+    return UserSummary(
+        id=target.id,
+        username=target.username,
+        wins=target.wins,
+        losses=target.losses,
+        current_room_id=current_room_id,
+    )
 
 
 @router.get("/{user_id}/recent-matches", response_model=RecentMatches)

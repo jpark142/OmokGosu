@@ -115,8 +115,8 @@ async def join_room(
         raise HTTPException(status_code=401, detail="wrong password")
     if err == "in_progress":
         raise HTTPException(status_code=409, detail="game in progress")
+    is_new_guest = err is None  # "already_in" means host re-entering, no message
     if err == "already_in":
-        # Host trying to join their own room: just return current state.
         pass
     detail = room_to_detail(room, session)
     # Push room state to existing members; push lobby update so list shows new guest.
@@ -125,6 +125,13 @@ async def join_room(
         {"type": "lobby_update", "action": "updated", "room_id": room.room_id,
          "room": room_to_summary(room, session).model_dump()}
     )
+    if is_new_guest:
+        from omok_server.api import chat as chat_helpers
+        await chat_helpers.emit_system_message(
+            key=f"room:{room.room_id}",
+            text=f"{user.username} 님이 입장했습니다.",
+            broadcast=lambda p: room_manager.broadcast_room(room.room_id, p),
+        )
     return detail
 
 
@@ -135,8 +142,18 @@ async def leave_one_room(room_id: str, *, user_id: int, db: Session) -> None:
     Used both by the explicit Leave button (REST + WS) and by the bulk
     `leave_all_rooms_for_user` cleanup.
     """
+    from omok_server.api import chat as chat_helpers
+
+    # Resolve the leaver's name before the room mutates so the system message
+    # has the right username even if the user row gets deleted later.
+    leaver = db.get(User, user_id)
+    leaver_name = leaver.username if leaver is not None else "(unknown)"
+
     _, host_left = await room_manager.leave(room_id, user_id=user_id)
     if host_left:
+        # Room is gone — drop its chat buffer too so it doesn't outlive the
+        # room in memory.
+        chat_helpers.drop_channel(f"room:{room_id}")
         await room_manager.broadcast_room(room_id, {"type": "room_closed", "reason": "host_left"})
         await room_manager.broadcast_lobby(
             {"type": "lobby_update", "action": "removed", "room_id": room_id, "room": None}
@@ -151,6 +168,12 @@ async def leave_one_room(room_id: str, *, user_id: int, db: Session) -> None:
     await room_manager.broadcast_lobby(
         {"type": "lobby_update", "action": "updated", "room_id": room_id,
          "room": room_to_summary(refreshed, db).model_dump()}
+    )
+    # Guest left (host stayed) — note it in the room chat for the host.
+    await chat_helpers.emit_system_message(
+        key=f"room:{room_id}",
+        text=f"{leaver_name} 님이 퇴장했습니다.",
+        broadcast=lambda p: room_manager.broadcast_room(room_id, p),
     )
 
 

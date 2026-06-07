@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { getToken } from "@/lib/fetcher";
 import { CLIENT_VERSION } from "@/lib/version";
 import type {
+  ChatMessage,
   ClientRoomMsg,
   RoomDetail,
   ServerRoomMsg,
@@ -13,6 +14,8 @@ export interface RoomSocketState {
   connected: boolean;
   gameId: string | null;
   closed: { reason: string } | null;
+  chat: ChatMessage[];
+  sendChat: (text: string) => void;
   send: (msg: ClientRoomMsg) => void;
   onMessage: (cb: (msg: ServerRoomMsg) => void) => () => void;
 }
@@ -22,6 +25,7 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
   const [connected, setConnected] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
   const [closed, setClosed] = useState<{ reason: string } | null>(null);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const listenersRef = useRef<Set<(msg: ServerRoomMsg) => void>>(new Set());
 
@@ -53,6 +57,11 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
           if (msg.type === "room_state") setRoom(msg.room);
           else if (msg.type === "room_game_started") setGameId(msg.game_id);
           else if (msg.type === "room_closed") setClosed({ reason: msg.reason });
+          else if (msg.type === "chat_history") setChat(msg.messages);
+          else if (msg.type === "chat") {
+            const { user_id, username, text, server_time_ms } = msg;
+            setChat((prev) => [...prev, { user_id, username, text, server_time_ms }]);
+          }
           for (const l of listenersRef.current) l(msg);
         } catch {
           /* ignore */
@@ -93,5 +102,11 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
     };
   };
 
-  return { room, connected, gameId, closed, send, onMessage };
+  const sendChat = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    send({ type: "chat", text: trimmed.slice(0, 200) });
+  };
+
+  return { room, connected, gameId, closed, chat, sendChat, send, onMessage };
 }

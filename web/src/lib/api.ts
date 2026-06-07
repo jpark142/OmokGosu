@@ -10,6 +10,7 @@ import type {
   RoomDetail,
   RoomSummary,
   SStateMsg,
+  UserSummary,
 } from "@/types/protocol";
 
 export function createGame(req: CreateGameRequest): Promise<CreateGameResponse> {
@@ -52,4 +53,8 @@ export function getMatch(matchId: number): Promise<MatchDetail> {
 
 export function getLeaderboard(limit = 20): Promise<Leaderboard> {
   return http.get<Leaderboard>(`/api/users/leaderboard?limit=${limit}`);
+}
+
+export function getUser(userId: number): Promise<UserSummary> {
+  return http.get<UserSummary>(`/api/users/${userId}`);
 }

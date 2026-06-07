@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import Board from "@/components/Board";
+import Chat from "@/components/Chat";
 import Clock from "@/components/Clock";
 import { useGameSocket } from "@/hooks/useGameSocket";
 import { useAuth } from "@/lib/auth";
@@ -51,7 +52,7 @@ export default function Game() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const { user, applyStats } = useAuth();
-  const { state, connected, send, onMessage } = useGameSocket(gameId);
+  const { state, connected, chat, sendChat, send, onMessage } = useGameSocket(gameId);
   const [gameOver, setGameOver] = useState<{
     winner: ColorStr | null;
     reason: GameOverReason;
@@ -59,6 +60,9 @@ export default function Game() {
     matchId: number | null;
   } | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  // Confirm-leave modal: set the pending destination URL when the user clicks
+  // "← 홈" mid-game. Null means no confirmation in flight.
+  const [pendingExit, setPendingExit] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onMessage((msg) => {
@@ -141,6 +145,24 @@ export default function Game() {
     send({ type: "resign", color: myColor });
   };
 
+  // "← 홈" handler. If the game is still IN_PROGRESS, open a confirm dialog
+  // — leaving mid-game counts as a resignation. After game-over the same
+  // button just navigates (no resignation needed).
+  const onHomeClick = () => {
+    if (!state || state.status === "OVER") {
+      navigate("/");
+      return;
+    }
+    setPendingExit("/");
+  };
+
+  const confirmLeaveAndResign = () => {
+    onResign();
+    const dest = pendingExit ?? "/";
+    setPendingExit(null);
+    navigate(dest);
+  };
+
   const winnerText = useMemo(() => {
     if (!gameOver) return null;
     if (gameOver.winner === null) return "무승부";
@@ -152,7 +174,7 @@ export default function Game() {
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-4">
           <button
-            onClick={() => navigate("/")}
+            onClick={onHomeClick}
             className="text-sm text-stone-500 hover:text-stone-900"
           >
             ← 홈
@@ -225,11 +247,45 @@ export default function Game() {
                 >
                   기권
                 </button>
+
+                <Chat
+                  title="채팅"
+                  messages={chat}
+                  onSend={sendChat}
+                  disabled={!connected}
+                  size="sm"
+                />
               </>
             )}
           </div>
         </div>
       </div>
+
+      {pendingExit !== null && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-30">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full space-y-4">
+            <h2 className="text-lg font-bold">게임을 나가시겠어요?</h2>
+            <p className="text-sm text-stone-600 leading-relaxed">
+              지금 나가면 <strong className="text-red-600">기권 처리</strong>되어
+              상대에게 승리가 기록됩니다.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPendingExit(null)}
+                className="flex-1 py-2 border border-stone-300 rounded text-stone-700 hover:bg-stone-50"
+              >
+                계속 둘게요
+              </button>
+              <button
+                onClick={confirmLeaveAndResign}
+                className="flex-1 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                나가기 (기권)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {gameOver && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 animate-fade-in">

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlmodel import Session
 
+from omok_server.api import chat as chat_helpers
 from omok_server.auth.deps import get_current_user_ws, verify_ws_client_version
 from omok_server.api.rooms import leave_one_room, room_to_detail, room_to_summary
 from omok_server.db.engine import engine
@@ -96,6 +97,10 @@ async def room_ws(ws: WebSocket, room_id: str):
     bus = _bus_for(room_id)
     bus.sockets.add(ws)
     await _send_room_state(room_id, target_ws=ws)
+    # Recent chat history (room-scoped) — only when non-empty.
+    history = chat_helpers.history_for(f"room:{room_id}")
+    if history is not None:
+        await ws.send_text(json.dumps(history.model_dump(), default=str))
 
     try:
         while True:
@@ -112,6 +117,17 @@ async def room_ws(ws: WebSocket, room_id: str):
                 await _send_json(ws, SPongMsg())
                 continue
 
+            if mtype == "chat":
+                result = await chat_helpers.handle_incoming_chat(
+                    key=f"room:{room_id}",
+                    user=user,
+                    text=msg.get("text", ""),
+                    broadcast=lambda p: broadcast_room(room_id, p),
+                )
+                if result == chat_helpers.ChatResult.RATE_LIMITED:
+                    await _send_json(ws, SErrorMsg(message="잠시 후 다시 시도하세요."))
+                continue
+
             if mtype == "ready":
                 value = bool(msg.get("value", False))
                 updated = await room_manager.set_ready(room_id, user_id=user.id, value=value)
@@ -126,6 +142,13 @@ async def room_ws(ws: WebSocket, room_id: str):
                         "room_id": room_id,
                         "room": room_to_summary(updated, db).model_dump(),
                     })
+                # System message: only when toggling INTO ready (not when unreadying).
+                if value:
+                    await chat_helpers.emit_system_message(
+                        key=f"room:{room_id}",
+                        text=f"{user.username} 님이 준비 완료.",
+                        broadcast=lambda p: broadcast_room(room_id, p),
+                    )
                 continue
 
             if mtype == "start":
@@ -167,6 +190,13 @@ async def room_ws(ws: WebSocket, room_id: str):
                         "room_id": room_id,
                         "room": room_to_summary(started, db).model_dump(),
                     })
+                # Drop a system note into the room chat so the next time the
+                # players return to the room (post-game) there's clear context.
+                await chat_helpers.emit_system_message(
+                    key=f"room:{room_id}",
+                    text="게임 시작!",
+                    broadcast=lambda p: broadcast_room(room_id, p),
+                )
                 continue
 
             if mtype == "leave":

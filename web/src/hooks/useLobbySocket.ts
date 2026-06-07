@@ -2,16 +2,19 @@ import { useEffect, useRef, useState } from "react";
 
 import { getToken } from "@/lib/fetcher";
 import { CLIENT_VERSION } from "@/lib/version";
-import type { RoomSummary, ServerLobbyMsg } from "@/types/protocol";
+import type { ChatMessage, RoomSummary, ServerLobbyMsg } from "@/types/protocol";
 
 export interface LobbySocketState {
   rooms: RoomSummary[];
   connected: boolean;
+  chat: ChatMessage[];
+  sendChat: (text: string) => void;
 }
 
 export function useLobbySocket(): LobbySocketState {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [connected, setConnected] = useState(false);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -46,6 +49,11 @@ export function useLobbySocket(): LobbySocketState {
               if (msg.action === "removed" || msg.room === null) return without;
               return [...without, msg.room].sort((a, b) => b.created_at - a.created_at);
             });
+          } else if (msg.type === "chat_history") {
+            setChat(msg.messages);
+          } else if (msg.type === "chat") {
+            const { user_id, username, text, server_time_ms } = msg;
+            setChat((prev) => [...prev, { user_id, username, text, server_time_ms }]);
           }
         } catch {
           /* ignore */
@@ -73,5 +81,14 @@ export function useLobbySocket(): LobbySocketState {
     };
   }, []);
 
-  return { rooms, connected };
+  const sendChat = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "chat", text: trimmed.slice(0, 200) }));
+    }
+  };
+
+  return { rooms, connected, chat, sendChat };
 }

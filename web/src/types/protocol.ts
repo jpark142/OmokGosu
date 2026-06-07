@@ -140,7 +140,8 @@ export type ClientRoomMsg =
   | { type: "ready"; value: boolean }
   | { type: "start" }
   | { type: "leave" }
-  | { type: "ping" };
+  | { type: "ping" }
+  | { type: "chat"; text: string };
 
 // Room WS (server → client)
 export type ServerRoomMsg =
@@ -148,9 +149,29 @@ export type ServerRoomMsg =
   | { type: "room_game_started"; game_id: string }
   | { type: "room_closed"; reason: "host_left" | "kicked" }
   | { type: "error"; message: string }
-  | { type: "pong" };
+  | { type: "pong" }
+  | ChatEnvelope
+  | ChatHistoryEnvelope;
 
-// Lobby WS (server → client only — client just keepalive pings)
+// Chat — shared across lobby/room/game channels
+export interface ChatMessage {
+  user_id: number;       // 0 = system
+  username: string;      // "시스템" for system messages
+  text: string;
+  server_time_ms: number;
+  is_system?: boolean;
+}
+
+export interface ChatHistoryEnvelope {
+  type: "chat_history";
+  messages: ChatMessage[];
+}
+
+export interface ChatEnvelope extends ChatMessage {
+  type: "chat";
+}
+
+// Lobby WS (server → client — client sends ping/chat)
 export type ServerLobbyMsg =
   | { type: "lobby_snapshot"; rooms: RoomSummary[] }
   | {
@@ -159,6 +180,8 @@ export type ServerLobbyMsg =
       room_id: string;
       room: RoomSummary | null;
     }
+  | ChatEnvelope
+  | ChatHistoryEnvelope
   | { type: "pong" };
 
 export interface ClockSnapshot {
@@ -253,11 +276,14 @@ export type ServerMsg =
   | SForbiddenRejectedMsg
   | SGameOverMsg
   | SErrorMsg
-  | SPongMsg;
+  | SPongMsg
+  | ChatEnvelope
+  | ChatHistoryEnvelope;
 
 // ---------- WS client → server ----------
 
 export type ClientMsg =
   | { type: "move"; r: number; c: number }
   | { type: "resign"; color?: ColorStr }
-  | { type: "ping" };
+  | { type: "ping" }
+  | { type: "chat"; text: string };

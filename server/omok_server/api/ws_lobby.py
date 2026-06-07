@@ -1,9 +1,4 @@
-"""WebSocket endpoint for the lobby: live room list updates.
-
-Read-only from the client side — the lobby is push-only. Membership/joining
-happens via the REST endpoints in `api/rooms.py`; this channel just streams
-created/updated/removed events so the list stays fresh without polling.
-"""
+"""WebSocket endpoint for the lobby: live room list updates + global chat."""
 from __future__ import annotations
 
 import json
@@ -12,6 +7,7 @@ from dataclasses import dataclass, field
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlmodel import Session
 
+from omok_server.api import chat as chat_helpers
 from omok_server.auth.deps import get_current_user_ws, verify_ws_client_version
 from omok_server.api.rooms import room_to_summary
 from omok_server.db.engine import engine
@@ -19,6 +15,8 @@ from omok_server.game.room_manager import room_manager
 from omok_server.schemas import SPongMsg
 
 router = APIRouter()
+
+_LOBBY_CHAT_KEY = "lobby"
 
 
 @dataclass
@@ -58,15 +56,36 @@ async def lobby_ws(ws: WebSocket):
         }
     try:
         await ws.send_text(json.dumps(payload, default=str))
+        # Send recent chat history only if any exists (existing tests don't
+        # expect an empty payload here).
+        history = chat_helpers.history_for(_LOBBY_CHAT_KEY)
+        if history is not None:
+            await ws.send_text(json.dumps(history.model_dump(), default=str))
+
         while True:
             raw = await ws.receive_text()
-            # The lobby channel only supports keepalive pings from the client.
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            if msg.get("type") == "ping":
+            mtype = msg.get("type")
+            if mtype == "ping":
                 await ws.send_text(SPongMsg().model_dump_json())
+                continue
+            if mtype == "chat":
+                result = await chat_helpers.handle_incoming_chat(
+                    key=_LOBBY_CHAT_KEY,
+                    user=user,
+                    text=msg.get("text", ""),
+                    broadcast=broadcast_lobby,
+                )
+                if result == chat_helpers.ChatResult.RATE_LIMITED:
+                    await ws.send_text(json.dumps(
+                        {"type": "error", "message": "잠시 후 다시 시도하세요."},
+                        default=str,
+                    ))
+                continue
+            # Other client messages are ignored on the lobby channel.
     except WebSocketDisconnect:
         pass
     finally:

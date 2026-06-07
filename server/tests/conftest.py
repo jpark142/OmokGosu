@@ -21,7 +21,18 @@ os.environ.setdefault(
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from omok_server.api import chat as _chat_helpers  # noqa: E402
 from omok_server.main import app  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_chat_state():
+    """Chat buffers + rate-limit state are process-global. Wipe between tests
+    so a system message emitted by one test doesn't show up in another's
+    chat_history (which would derail WS receive sequences)."""
+    _chat_helpers.clear_all_buffers()
+    yield
+    _chat_helpers.clear_all_buffers()
 
 
 @pytest.fixture

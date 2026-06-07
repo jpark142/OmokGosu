@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { getToken } from "@/lib/fetcher";
 import { CLIENT_VERSION } from "@/lib/version";
-import type { ClientMsg, ServerMsg, SStateMsg } from "@/types/protocol";
+import type { ChatMessage, ClientMsg, ServerMsg, SStateMsg } from "@/types/protocol";
 
 export interface GameSocketState {
   state: SStateMsg | null;
   connected: boolean;
+  chat: ChatMessage[];
+  sendChat: (text: string) => void;
   send: (msg: ClientMsg) => void;
   onMessage: (listener: (msg: ServerMsg) => void) => () => void;
 }
@@ -14,6 +16,7 @@ export interface GameSocketState {
 export function useGameSocket(gameId: string | undefined): GameSocketState {
   const [state, setState] = useState<SStateMsg | null>(null);
   const [connected, setConnected] = useState(false);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const listenersRef = useRef<Set<(msg: ServerMsg) => void>>(new Set());
 
@@ -42,6 +45,11 @@ export function useGameSocket(gameId: string | undefined): GameSocketState {
         try {
           const msg = JSON.parse(ev.data) as ServerMsg;
           if (msg.type === "state") setState(msg);
+          else if (msg.type === "chat_history") setChat(msg.messages);
+          else if (msg.type === "chat") {
+            const { user_id, username, text, server_time_ms } = msg;
+            setChat((prev) => [...prev, { user_id, username, text, server_time_ms }]);
+          }
           for (const l of listenersRef.current) l(msg);
         } catch {
           /* ignore */
@@ -85,5 +93,11 @@ export function useGameSocket(gameId: string | undefined): GameSocketState {
     };
   };
 
-  return { state, connected, send, onMessage };
+  const sendChat = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    send({ type: "chat", text: trimmed.slice(0, 200) });
+  };
+
+  return { state, connected, chat, sendChat, send, onMessage };
 }

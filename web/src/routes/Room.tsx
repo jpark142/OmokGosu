@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import Chat from "@/components/Chat";
 import UserHoverCard from "@/components/UserHoverCard";
 import { useRoomSocket } from "@/hooks/useRoomSocket";
 import { leaveRoom } from "@/lib/api";
@@ -63,7 +64,7 @@ export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { room, connected, gameId, closed, send } = useRoomSocket(roomId);
+  const { room, connected, gameId, closed, chat, sendChat, send } = useRoomSocket(roomId);
 
   // Auto-navigate to game when host starts.
   useEffect(() => {
@@ -225,6 +226,15 @@ export default function Room() {
             이 방의 멤버가 아닙니다.
           </div>
         )}
+
+        {/* Chat — visible to both members while waiting in the room */}
+        <Chat
+          title="방 채팅"
+          messages={chat}
+          onSend={sendChat}
+          disabled={!connected}
+          size="sm"
+        />
       </div>
     </div>
   );

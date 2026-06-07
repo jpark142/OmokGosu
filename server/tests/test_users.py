@@ -96,3 +96,44 @@ def test_recent_matches_unknown_user_returns_404(client) -> None:
 def test_recent_matches_requires_auth(client) -> None:
     r = client.get("/api/users/1/recent-matches")
     assert r.status_code == 401
+
+
+# ----- GET /api/users/:id -----
+
+
+def test_get_user_returns_summary(client) -> None:
+    tok_a, alice = _register(client)
+    tok_b, bob = _register(client)
+    r = client.get(f"/api/users/{bob['id']}", headers={"Authorization": f"Bearer {tok_a}"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == bob["id"]
+    assert body["username"] == bob["username"]
+    assert body["wins"] == 0 and body["losses"] == 0
+    # current_room_id only set for self
+    assert body["current_room_id"] is None
+
+
+def test_get_user_hides_others_current_room(client) -> None:
+    tok_a, alice = _register(client)
+    tok_b, bob = _register(client)
+    # Bob creates a room.
+    rid = client.post("/api/rooms", json={"title": "t"},
+                      headers={"Authorization": f"Bearer {tok_b}"}).json()["room_id"]
+    # Alice asks for Bob — should not see current_room_id.
+    r = client.get(f"/api/users/{bob['id']}", headers={"Authorization": f"Bearer {tok_a}"})
+    assert r.json()["current_room_id"] is None
+    # But Bob asking about himself sees it.
+    r = client.get(f"/api/users/{bob['id']}", headers={"Authorization": f"Bearer {tok_b}"})
+    assert r.json()["current_room_id"] == rid
+
+
+def test_get_user_404_for_unknown(client) -> None:
+    tok, _ = _register(client)
+    r = client.get("/api/users/999999", headers={"Authorization": f"Bearer {tok}"})
+    assert r.status_code == 404
+
+
+def test_get_user_requires_auth(client) -> None:
+    r = client.get("/api/users/1")
+    assert r.status_code == 401

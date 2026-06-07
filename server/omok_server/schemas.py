@@ -277,6 +277,30 @@ class SLobbyUpdateMsg(BaseModel):
     room: RoomSummary | None = None  # null when action == "removed"
 
 
+# ----- Chat (shared by lobby / room / game channels) -----
+
+
+class CChatMsg(BaseModel):
+    type: Literal["chat"] = "chat"
+    text: str = Field(min_length=1, max_length=200)
+
+
+class SChatMsg(BaseModel):
+    type: Literal["chat"] = "chat"
+    user_id: int                     # 0 reserved for system messages
+    username: str                    # "시스템" for system messages
+    text: str
+    server_time_ms: int
+    is_system: bool = False          # True → rendered differently by the client
+
+
+class SChatHistoryMsg(BaseModel):
+    """Sent once to a freshly connected client so they can see recent
+    conversation. Subsequent live messages arrive as individual SChatMsg."""
+    type: Literal["chat_history"] = "chat_history"
+    messages: list[SChatMsg]
+
+
 class CreateGameResponse(BaseModel):
     game_id: str
     your_color: ColorStr

@@ -15,6 +15,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from sqlmodel import Session
 
+from omok_server.api import chat as chat_helpers
 from omok_server.auth.deps import get_current_user_ws, verify_ws_client_version
 from omok_server.db.engine import engine
 from omok_server.game.manager import manager
@@ -105,6 +106,11 @@ async def _emit_game_over_msg(session: GameSession, fallback_reason: GameOverRea
         session.recorded_match = True
         session.recorded_match_id = result.match_id
         stats_updates = result.stats_updates
+        # Drop this game's chat buffer — banter doesn't outlive the game.
+        # Live broadcasts already reach connected clients directly via the
+        # bus, so the only effect is that someone refreshing immediately
+        # after game-over sees an empty chat history.
+        chat_helpers.drop_channel(f"game:{session.game_id}")
         # If this game was hosted by a Room, transition the room back to LOBBY
         # and push the new state to room + lobby subscribers. Lock order
         # discipline: this is called while holding session.lock, and we only
@@ -227,6 +233,10 @@ async def game_ws(ws: WebSocket, game_id: str):
     bus = _bus_for(game_id)
     bus.sockets.add(ws)
     await _send_json(ws, session.to_state_msg())
+    # Recent chat history for this game — only when non-empty.
+    history = chat_helpers.history_for(f"game:{game_id}")
+    if history is not None:
+        await ws.send_text(json.dumps(history.model_dump(), default=str))
     await _start_ticker_if_needed(session)
 
     # If side-to-move is an AI (e.g. reconnect during an AI think), play now.
@@ -246,6 +256,16 @@ async def game_ws(ws: WebSocket, game_id: str):
             mtype = msg.get("type")
             if mtype == "ping":
                 await _send_json(ws, SPongMsg())
+                continue
+            if mtype == "chat":
+                result = await chat_helpers.handle_incoming_chat(
+                    key=f"game:{game_id}",
+                    user=user,
+                    text=msg.get("text", ""),
+                    broadcast=lambda p: _broadcast(game_id, p),
+                )
+                if result == chat_helpers.ChatResult.RATE_LIMITED:
+                    await _send_json(ws, SErrorMsg(message="잠시 후 다시 시도하세요."))
                 continue
             if mtype == "resign":
                 color_str = msg.get("color")
