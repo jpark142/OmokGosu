@@ -80,3 +80,6 @@ models/candidates/*.pth
 training/runs/
 training/replay_buffer/
 wandb/
+
+# Internal docs — kept on disk for working notes, not for sharing
+docs/
