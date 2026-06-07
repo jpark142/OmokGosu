@@ -140,6 +140,7 @@ export type ClientRoomMsg =
   | { type: "ready"; value: boolean }
   | { type: "start" }
   | { type: "leave" }
+  | { type: "kick" }                       // host removes the current guest
   | { type: "ping" }
   | { type: "chat"; text: string };
 
@@ -148,6 +149,7 @@ export type ServerRoomMsg =
   | { type: "room_state"; room: RoomDetail }
   | { type: "room_game_started"; game_id: string }
   | { type: "room_closed"; reason: "host_left" | "kicked" }
+  | { type: "kicked"; user_id: number }    // broadcast; only matching client reacts
   | { type: "error"; message: string }
   | { type: "pong" }
   | ChatEnvelope

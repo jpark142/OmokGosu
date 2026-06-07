@@ -14,11 +14,15 @@ function MemberCard({
   member,
   ready,
   isYou,
+  canKick,
+  onKick,
 }: {
   label: string;
   member: RoomMemberSummary | null;
   ready: boolean;
   isYou: boolean;
+  canKick?: boolean;            // true → render the "강퇴" button
+  onKick?: () => void;
 }) {
   return (
     <div className="bg-white rounded-md border border-stone-200 p-4 min-h-[120px] flex flex-col">
@@ -43,7 +47,7 @@ function MemberCard({
               <> · 승률 {Math.round((member.wins / (member.wins + member.losses)) * 100)}%</>
             )}
           </div>
-          <div className="mt-auto pt-2">
+          <div className="mt-auto pt-2 flex items-center justify-between gap-2">
             {ready ? (
               <span className="inline-block text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded">
                 READY
@@ -52,6 +56,15 @@ function MemberCard({
               <span className="inline-block text-xs px-2 py-0.5 bg-stone-100 text-stone-500 rounded">
                 대기
               </span>
+            )}
+            {canKick && onKick && (
+              <button
+                onClick={onKick}
+                className="text-xs px-2 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50"
+                title="이 게스트를 강퇴합니다"
+              >
+                강퇴
+              </button>
             )}
           </div>
         </>
@@ -64,7 +77,8 @@ export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { room, connected, gameId, closed, chat, sendChat, send } = useRoomSocket(roomId);
+  const { room, connected, gameId, closed, kickedUserId, chat, sendChat, send } =
+    useRoomSocket(roomId);
 
   // Auto-navigate to game when host starts.
   useEffect(() => {
@@ -78,6 +92,10 @@ export default function Room() {
       navigate("/lobby", { replace: true });
     }
   }, [closed, navigate]);
+
+  // "kicked" is broadcast to every socket in the room — only show the modal
+  // when the targeted user_id is us.
+  const wasKicked = kickedUserId !== null && user?.id === kickedUserId;
 
   const me = user;
   const isHost = useMemo(
@@ -101,6 +119,12 @@ export default function Room() {
       return;
     }
     send({ type: "start" });
+  };
+
+  const onKickGuest = () => {
+    if (!isHost || !room?.guest) return;
+    if (!window.confirm(`${room.guest.username} 님을 강퇴하시겠습니까?`)) return;
+    send({ type: "kick" });
   };
 
   // Track whether the user is intentionally leaving (button or beforeunload)
@@ -183,6 +207,8 @@ export default function Room() {
             member={room?.guest ?? null}
             ready={room?.guest_ready ?? false}
             isYou={isGuest}
+            canKick={isHost && !!room?.guest && room.status === "LOBBY"}
+            onKick={onKickGuest}
           />
         </div>
 
@@ -236,6 +262,24 @@ export default function Room() {
           size="sm"
         />
       </div>
+
+      {/* Kicked modal — only this user got removed by the host */}
+      {wasKicked && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full space-y-4">
+            <h2 className="text-lg font-bold">강퇴되었습니다</h2>
+            <p className="text-sm text-stone-600">
+              방장에 의해 강퇴되었습니다.
+            </p>
+            <button
+              onClick={() => navigate("/lobby", { replace: true })}
+              className="w-full py-2 bg-stone-900 text-white rounded hover:bg-stone-800"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

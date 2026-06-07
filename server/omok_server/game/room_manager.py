@@ -106,6 +106,24 @@ class RoomManager:
         await self.remove(room_id)
         return None, True
 
+    async def kick_guest(self, room_id: str, *, host_user_id: int) -> tuple[Room | None, int | None]:
+        """Host removes the guest. Returns (room, kicked_user_id) on success,
+        (None, None) on failure (caller is not host, no guest, or game in progress)."""
+        room = self._rooms.get(room_id)
+        if room is None:
+            return None, None
+        async with room.lock:
+            if room.host_user_id != host_user_id:
+                return None, None
+            if room.status != RoomStatus.LOBBY:
+                return None, None  # can't kick during PLAYING
+            if room.guest_user_id is None:
+                return None, None
+            kicked = room.guest_user_id
+            room.guest_user_id = None
+            room.guest_ready = False
+        return room, kicked
+
     async def set_ready(self, room_id: str, *, user_id: int, value: bool) -> Room | None:
         room = self._rooms.get(room_id)
         if room is None:

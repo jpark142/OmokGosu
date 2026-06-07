@@ -47,8 +47,11 @@ export function useGameSocket(gameId: string | undefined): GameSocketState {
           if (msg.type === "state") setState(msg);
           else if (msg.type === "chat_history") setChat(msg.messages);
           else if (msg.type === "chat") {
-            const { user_id, username, text, server_time_ms } = msg;
-            setChat((prev) => [...prev, { user_id, username, text, server_time_ms }]);
+            const { user_id, username, text, server_time_ms, is_system } = msg;
+            setChat((prev) => [
+              ...prev,
+              { user_id, username, text, server_time_ms, is_system },
+            ]);
           }
           for (const l of listenersRef.current) l(msg);
         } catch {

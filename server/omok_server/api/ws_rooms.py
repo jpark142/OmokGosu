@@ -205,6 +205,38 @@ async def room_ws(ws: WebSocket, room_id: str):
                 await ws.close()
                 return
 
+            if mtype == "kick":
+                room_now, kicked_uid = await room_manager.kick_guest(
+                    room_id, host_user_id=user.id
+                )
+                if room_now is None or kicked_uid is None:
+                    await _send_json(ws, SErrorMsg(message="강퇴할 수 없습니다"))
+                    continue
+                # 1) Push the updated room state (guest slot now empty) to all
+                #    members — including the kicked user, so their UI updates
+                #    momentarily before the modal appears.
+                await _send_room_state(room_id)
+                # 2) Broadcast a directed "kicked" event. Every socket on the
+                #    bus receives it, but the client only reacts when the
+                #    user_id matches its own — clean way to target one user
+                #    without per-socket addressing.
+                await broadcast_room(room_id, {"type": "kicked", "user_id": kicked_uid})
+                # 3) Lobby update + system message (resolve username inside
+                #    a single DB session).
+                with Session(engine) as db:
+                    await room_manager.broadcast_lobby({
+                        "type": "lobby_update", "action": "updated",
+                        "room_id": room_id, "room": room_to_summary(room_now, db).model_dump(),
+                    })
+                    kicked = db.get(User, kicked_uid)
+                    kicked_name = kicked.username if kicked is not None else "(unknown)"
+                await chat_helpers.emit_system_message(
+                    key=f"room:{room_id}",
+                    text=f"{kicked_name} 님이 방장에 의해 강퇴되었습니다.",
+                    broadcast=lambda p: broadcast_room(room_id, p),
+                )
+                continue
+
             await _send_json(ws, SErrorMsg(message=f"unknown type: {mtype}"))
     except WebSocketDisconnect:
         pass

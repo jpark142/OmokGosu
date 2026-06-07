@@ -248,6 +248,64 @@ def test_leave_all_endpoint(client) -> None:
     assert not any(r["room_id"] == rid for r in client.get("/api/rooms", headers=_hdr(other_tok)).json())
 
 
+def test_kick_clears_guest_and_notifies(client) -> None:
+    """Host kicks the guest. The guest slot is cleared, a 'kicked' broadcast
+    with the guest's user_id goes out, and the lobby update reflects the
+    empty guest slot."""
+    host_tok, _ = _register(client)
+    rid = client.post("/api/rooms", json={"title": "t"}, headers=_hdr(host_tok)).json()["room_id"]
+    guest_tok, guest = _register(client)
+    client.post(f"/api/rooms/{rid}/join", json={}, headers=_hdr(guest_tok))
+
+    with client.websocket_connect(f"/ws/rooms/{rid}?token={host_tok}") as host_ws:
+        _recv_skip_chat(host_ws)  # initial state
+        host_ws.send_text(json.dumps({"type": "kick"}))
+
+        saw_kicked = False
+        saw_empty = False
+        for _ in range(6):
+            msg = _recv_skip_chat(host_ws)
+            if msg["type"] == "kicked" and msg["user_id"] == guest["id"]:
+                saw_kicked = True
+            elif msg["type"] == "room_state" and msg["room"]["guest"] is None:
+                saw_empty = True
+            if saw_kicked and saw_empty:
+                break
+        assert saw_kicked
+        assert saw_empty
+
+    # And the room (still alive) now reports no guest.
+    detail = client.get(f"/api/rooms/{rid}", headers=_hdr(host_tok)).json()
+    assert detail["guest"] is None
+
+
+def test_kick_rejected_when_caller_is_not_host(client) -> None:
+    host_tok, _ = _register(client)
+    rid = client.post("/api/rooms", json={"title": "t"}, headers=_hdr(host_tok)).json()["room_id"]
+    guest_tok, _ = _register(client)
+    client.post(f"/api/rooms/{rid}/join", json={}, headers=_hdr(guest_tok))
+
+    with client.websocket_connect(f"/ws/rooms/{rid}?token={guest_tok}") as guest_ws:
+        _recv_skip_chat(guest_ws)  # initial state
+        guest_ws.send_text(json.dumps({"type": "kick"}))
+        msg = _recv_skip_chat(guest_ws)
+        assert msg["type"] == "error"
+
+    # Guest is still in the room.
+    detail = client.get(f"/api/rooms/{rid}", headers=_hdr(host_tok)).json()
+    assert detail["guest"] is not None
+
+
+def test_kick_rejected_with_no_guest(client) -> None:
+    host_tok, _ = _register(client)
+    rid = client.post("/api/rooms", json={"title": "t"}, headers=_hdr(host_tok)).json()["room_id"]
+    with client.websocket_connect(f"/ws/rooms/{rid}?token={host_tok}") as host_ws:
+        _recv_skip_chat(host_ws)
+        host_ws.send_text(json.dumps({"type": "kick"}))
+        msg = _recv_skip_chat(host_ws)
+        assert msg["type"] == "error"
+
+
 def test_room_ws_only_guest_can_ready(client) -> None:
     host_tok, _ = _register(client)
     rid = client.post("/api/rooms", json={"title": "t"}, headers=_hdr(host_tok)).json()["room_id"]
