@@ -34,7 +34,8 @@ def test_record_match_no_op_when_game_still_in_progress() -> None:
     assert result.stats_updates == []
 
 
-def test_record_match_hva_user_wins() -> None:
+def test_record_match_hva_does_not_change_stats() -> None:
+    """AI games are recorded for history but do NOT update wins/losses."""
     uid = _make_user(_u())
     s = GameSession.new(
         mode=GameMode.HVA, human_name="alice", ai_name="minimax", human_user_id=uid
@@ -47,11 +48,10 @@ def test_record_match_hva_user_wins() -> None:
     s.over_reason = GameOverReason.FIVE
 
     result = record_match(s, started_at=datetime.utcnow())
+    # Match row is created (so it shows up in history)...
     assert result.match_id is not None
-    # Exactly one stats update — the human (AI has no user_id).
-    assert len(result.stats_updates) == 1
-    u = result.stats_updates[0]
-    assert u.user_id == uid and u.wins == 1 and u.losses == 0
+    # ...but no stats_updates are emitted — AI games are unranked.
+    assert result.stats_updates == []
 
     with Session(engine) as db:
         m = db.exec(select(Match).where(Match.id == result.match_id)).first()
@@ -60,16 +60,17 @@ def test_record_match_hva_user_wins() -> None:
         assert m.winner_user_id == uid
         assert m.over_reason == "FIVE"
 
+        # Wins/losses are unchanged from the freshly-made user (0/0).
         refreshed = db.exec(select(User).where(User.id == uid)).first()
-        assert refreshed.wins == 1 and refreshed.losses == 0
+        assert refreshed.wins == 0 and refreshed.losses == 0
 
 
-def test_record_match_hva_user_loses() -> None:
+def test_record_match_hva_loss_does_not_change_stats() -> None:
+    """Losing to the AI shouldn't add a loss either."""
     uid = _make_user(_u())
     s = GameSession.new(
         mode=GameMode.HVA, human_name="bob", ai_name="minimax", human_user_id=uid
     )
-    # AI wins (the non-human color).
     ai_color = next(c for c, info in s.players.items() if info.user_id is None)
     s.status = GameStatus.OVER
     s.winner = ai_color
@@ -78,10 +79,11 @@ def test_record_match_hva_user_loses() -> None:
 
     result = record_match(s, started_at=datetime.utcnow())
     assert result.match_id is not None
-    assert len(result.stats_updates) == 1
-    assert result.stats_updates[0].user_id == uid
-    assert result.stats_updates[0].losses == 1
-    assert result.stats_updates[0].wins == 0
+    assert result.stats_updates == []
+
+    with Session(engine) as db:
+        refreshed = db.exec(select(User).where(User.id == uid)).first()
+        assert refreshed.wins == 0 and refreshed.losses == 0
 
 
 def test_record_match_hvh_both_users_updated() -> None:
@@ -115,11 +117,21 @@ def test_record_match_hvh_both_users_updated() -> None:
 def test_record_match_idempotency_via_session_flag() -> None:
     """The ws.py path guards re-recording via session.recorded_match. record_match
     itself is not idempotent (calling twice will INSERT twice); that's fine — the
-    contract is that callers set session.recorded_match=True after the first call."""
-    uid = _make_user(_u())
-    s = GameSession.new(mode=GameMode.HVA, human_name="x", ai_name="minimax", human_user_id=uid)
+    contract is that callers set session.recorded_match=True after the first call.
+
+    Uses an HVH match because HVA no longer updates wins/losses.
+    """
+    uid_a = _make_user(_u())
+    uid_b = _make_user(_u())
+    s = GameSession.new(
+        mode=GameMode.HVH,
+        human_name="alice",
+        human_user_id=uid_a,
+        guest_name="bob",
+        guest_user_id=uid_b,
+    )
     s.status = GameStatus.OVER
-    s.winner = next(c for c, info in s.players.items() if info.user_id == uid)
+    s.winner = ColorStr.BLACK
     from omok_server.schemas import GameOverReason
     s.over_reason = GameOverReason.FIVE
 
@@ -127,6 +139,7 @@ def test_record_match_idempotency_via_session_flag() -> None:
     assert s.recorded_match is False  # caller's responsibility; record_match doesn't set it
     s.recorded_match = True
     with Session(engine) as db:
-        u = db.exec(select(User).where(User.id == uid)).first()
+        black_uid = s.players[ColorStr.BLACK].user_id
+        u = db.exec(select(User).where(User.id == black_uid)).first()
         wins_after_one = u.wins
     assert wins_after_one == 1

@@ -96,26 +96,28 @@ def record_match(session: GameSession, started_at: datetime) -> MatchResult:
     updates: list[StatsUpdate] = []
     with Session(engine) as db:
         db.add(match)
-        # For each human participant: if their color won → wins+1, else losses+1.
-        # AI participants (user_id=None) are skipped — they don't carry stats.
-        # `session.winner` is the *color* that won, not a user_id, so we compare
-        # to the player's color directly. This handles HVA-loss correctly:
-        # when the AI wins, `winner_user_id` (the DB Match column) is NULL, but
-        # the human still gets a losses+1.
-        for color in (ColorStr.BLACK, ColorStr.WHITE):
-            uid = _user_id_for(session, color)
-            if uid is None:
-                continue
-            user = db.exec(select(User).where(User.id == uid)).first()
-            if user is None:
-                continue
-            if session.winner == color:
-                user.wins += 1
-            elif session.winner is not None:
-                user.losses += 1
-            # session.winner is None → draw (currently unreachable in Renju); skip.
-            db.add(user)
-            updates.append(StatsUpdate(user_id=user.id, wins=user.wins, losses=user.losses))
+        # AI games are recorded for history (kept visible on the profile)
+        # but deliberately do NOT touch wins/losses — those count only
+        # ranked human-vs-human results. The Match row stays so the user
+        # can still scroll through and replay AI games.
+        if not is_ai:
+            # For each human participant: if their color won → wins+1, else losses+1.
+            # `session.winner` is the *color* that won, not a user_id, so we compare
+            # to the player's color directly.
+            for color in (ColorStr.BLACK, ColorStr.WHITE):
+                uid = _user_id_for(session, color)
+                if uid is None:
+                    continue
+                user = db.exec(select(User).where(User.id == uid)).first()
+                if user is None:
+                    continue
+                if session.winner == color:
+                    user.wins += 1
+                elif session.winner is not None:
+                    user.losses += 1
+                # session.winner is None → draw (currently unreachable in Renju); skip.
+                db.add(user)
+                updates.append(StatsUpdate(user_id=user.id, wins=user.wins, losses=user.losses))
         db.commit()
         match_id = match.id
 

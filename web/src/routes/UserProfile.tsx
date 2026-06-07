@@ -163,9 +163,17 @@ export default function UserProfile() {
                     >
                       {m.you_won ? "승" : "패"}
                     </span>
-                    <span className="flex-1 truncate">
-                      {m.is_ai_game ? "AI" : (m.opponent_username ?? "(탈퇴한 유저)")}
-                      <span className="text-stone-400 ml-2">
+                    <span className="flex-1 truncate flex items-center gap-2 min-w-0">
+                      {m.is_ai_game ? (
+                        <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-medium shrink-0">
+                          vs AI
+                        </span>
+                      ) : (
+                        <span className="truncate">
+                          {m.opponent_username ?? "(탈퇴한 유저)"}
+                        </span>
+                      )}
+                      <span className="text-stone-400 whitespace-nowrap">
                         · {m.your_color === "BLACK" ? "흑" : "백"}
                       </span>
                     </span>

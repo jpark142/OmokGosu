@@ -71,6 +71,30 @@ def _run_inline_migrations() -> None:
             ))
             conn.commit()
 
+        # One-shot backfill: AI games no longer affect wins/losses, but old
+        # rows still have them counted. Recompute User.wins/losses from
+        # Match rows where is_ai_game=0. Gated by PRAGMA user_version so it
+        # runs exactly once per database.
+        current_version = conn.execute(text("PRAGMA user_version")).scalar()
+        if (current_version or 0) < 1:
+            conn.execute(text("""
+                UPDATE user SET
+                    wins = (
+                        SELECT COUNT(*) FROM match
+                        WHERE match.is_ai_game = 0
+                          AND match.winner_user_id = user.id
+                    ),
+                    losses = (
+                        SELECT COUNT(*) FROM match
+                        WHERE match.is_ai_game = 0
+                          AND (match.black_user_id = user.id OR match.white_user_id = user.id)
+                          AND match.winner_user_id IS NOT NULL
+                          AND match.winner_user_id != user.id
+                    )
+            """))
+            conn.execute(text("PRAGMA user_version = 1"))
+            conn.commit()
+
 
 def get_session() -> Session:
     """FastAPI dependency / context manager helper. Caller is responsible for

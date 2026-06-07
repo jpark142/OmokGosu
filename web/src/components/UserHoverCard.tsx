@@ -135,11 +135,17 @@ export default function UserHoverCard({ userId, children }: Props) {
                     >
                       {m.you_won ? "승" : "패"}
                     </span>
-                    <span className="text-stone-700 truncate flex-1">
-                      {m.is_ai_game
-                        ? "AI"
-                        : (m.opponent_username ?? "(탈퇴한 유저)")}
-                      <span className="text-stone-400 ml-1">
+                    <span className="text-stone-700 truncate flex-1 flex items-center gap-1 min-w-0">
+                      {m.is_ai_game ? (
+                        <span className="inline-flex items-center text-[10px] leading-none px-1 py-0.5 bg-amber-100 text-amber-800 rounded font-medium shrink-0">
+                          vs AI
+                        </span>
+                      ) : (
+                        <span className="truncate">
+                          {m.opponent_username ?? "(탈퇴한 유저)"}
+                        </span>
+                      )}
+                      <span className="text-stone-400 whitespace-nowrap">
                         · {m.your_color === "BLACK" ? "흑" : "백"}
                       </span>
                     </span>
