@@ -1,45 +1,37 @@
-# OmokGosu on Fly.io
+# fly.toml app configuration file generated for omokgosu on 2026-06-09T17:25:10Z
 #
-# Initial setup (one-time):
-#   flyctl auth signup
-#   flyctl launch --name omokgosu --region nrt --no-deploy --copy-config
-#   flyctl volumes create omokgosu_data --region nrt --size 1
-#   flyctl secrets set OMOK_JWT_SECRET="$(python -c 'import secrets;print(secrets.token_urlsafe(32))')"
-#   flyctl deploy
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-# Subsequent deploys: flyctl deploy
 
-app = "omokgosu"
-primary_region = "nrt"  # Tokyo — closest Fly region to Korea
+app = 'omokgosu'
+primary_region = 'sin'
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = 'Dockerfile'
 
 [env]
-  PYTHONUNBUFFERED = "1"
+  PYTHONUNBUFFERED = '1'
 
 [[mounts]]
-  source = "omokgosu_data"
-  destination = "/data"
+  source = 'omokgosu_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "off"
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
-  processes = ["app"]
+  processes = ['app']
 
   [[http_service.checks]]
-    # 30s gives uvicorn + C++ pybind module enough time on cold start.
-    # 10s used to be tight on shared-cpu-1x and contributed to deploy timeouts.
-    grace_period = "30s"
-    interval = "30s"
-    method = "GET"
-    timeout = "5s"
-    path = "/api/health"
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/api/health'
 
 [[vm]]
-  cpu_kind = "shared"
+  cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 512  # 256 is tight for the C++ pybind module + uvicorn workers
+  memory_mb = 512
