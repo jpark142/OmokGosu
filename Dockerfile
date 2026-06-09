@@ -58,7 +58,8 @@ COPY --from=web-build /web/dist /app/web/dist
 ENV OMOK_DB_PATH=/data/omok.sqlite
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8000
+# Fly.io expects 8080 by default. Local dev still uses 8000 via scripts\dev.ps1.
+EXPOSE 8080
 
 CMD ["uvicorn", "omok_server.main:app", \
-     "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+     "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
