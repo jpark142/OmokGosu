@@ -18,6 +18,12 @@ primary_region = "nrt"  # Tokyo — closest Fly region to Korea
 [env]
   PYTHONUNBUFFERED = "1"
 
+# Explicit process command: overrides the Dockerfile CMD and is recorded
+# directly into the Fly machine spec, so subsequent deploys can't drift
+# back to a stale CMD that was baked into a previous machine.
+[processes]
+  app = "uvicorn omok_server.main:app --host 0.0.0.0 --port 8080 --workers 1"
+
 [[mounts]]
   source = "omokgosu_data"
   destination = "/data"
