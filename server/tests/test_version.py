@@ -16,6 +16,26 @@ def _register(client):
     return r.json()["access_token"]
 
 
+# ----- /api/health endpoint (Fly.io liveness probe) -----
+
+def test_health_endpoint_returns_ok_json(client) -> None:
+    """Fly.io's health check hits GET /api/health every 30s. The handler
+    must stay cheap and dependency-free so a transient DB blip doesn't
+    cause Fly to cycle the machine."""
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["version"] == "1.0.0"
+
+
+def test_health_endpoint_no_auth_no_version_header(client) -> None:
+    """Same lenient policy as /api/version — probes shouldn't fail on
+    missing X-Client-Version."""
+    r = client.get("/api/health", headers={})
+    assert r.status_code == 200
+
+
 # ----- /api/version endpoint -----
 
 def test_version_endpoint_unauthenticated(client) -> None:

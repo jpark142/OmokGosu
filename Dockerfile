@@ -15,7 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY VERSION CMakeLists.txt pyproject.toml ./
+# README.md is referenced by pyproject.toml's `readme = "README.md"`; without
+# it scikit-build-core's metadata generation fails. Keep the file small —
+# `.dockerignore` still excludes everything else under `*.md`.
+COPY VERSION CMakeLists.txt pyproject.toml README.md ./
 COPY cpp/ cpp/
 
 RUN pip install --no-cache-dir scikit-build-core "pybind11>=2.12"
