@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import UpgradeBanner from "@/components/UpgradeBanner";
 import UpgradeModal from "@/components/UpgradeModal";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { CLIENT_VERSION } from "@/lib/version";
 import { VersionProvider } from "@/lib/versionContext";
 import Game from "@/routes/Game";
 import Leaderboard from "@/routes/Leaderboard";
@@ -58,6 +59,12 @@ export default function App() {
         </Routes>
       </AuthProvider>
       <UpgradeModal />
+      <span className="fixed bottom-2 left-3 text-xs text-stone-400/60 pointer-events-none select-none tabular-nums">
+        v{CLIENT_VERSION}
+      </span>
+      <span className="fixed bottom-2 right-3 text-xs text-stone-400/60 hover:text-stone-700 transition pointer-events-none select-none">
+        by jypark
+      </span>
     </VersionProvider>
   );
 }

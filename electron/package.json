@@ -30,6 +30,7 @@
       "target": "nsis",
       "icon": "assets/icon.ico"
     },
+    "artifactName": "${productName}-Setup-${version}.${ext}",
     "nsis": {
       "oneClick": false,
       "perMachine": false,

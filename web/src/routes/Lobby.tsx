@@ -217,10 +217,6 @@ export default function Lobby() {
           disabled={!connected}
           size="lg"
         />
-
-        <div className="text-xs text-stone-500 text-center border-t pt-4">
-          렌주는 흑에게 3-3 / 4-4 / 장목 금수가 적용됩니다. 색은 게임 시작 시 무작위로 배정됩니다.
-        </div>
       </div>
 
       <CreateRoomDialog
