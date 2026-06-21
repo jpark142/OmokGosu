@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from omok_server import __version__
 from omok_server.api import auth as auth_api
+from omok_server.api import bug_reports as bug_reports_api
 from omok_server.api import games as games_api
 from omok_server.api import matches as matches_api
 from omok_server.api import rooms as rooms_api
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
 
     app.include_router(system_api.router)
     app.include_router(auth_api.router)
+    app.include_router(bug_reports_api.router)
     app.include_router(games_api.router)
     app.include_router(matches_api.router)
     app.include_router(rooms_api.router)

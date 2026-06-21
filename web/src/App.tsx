@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import BugReportLauncher from "@/components/BugReportLauncher";
 import UpgradeBanner from "@/components/UpgradeBanner";
 import UpgradeModal from "@/components/UpgradeModal";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="/leaderboard" element={<Protected><Leaderboard /></Protected>} />
           <Route path="/users/:userId" element={<Protected><UserProfile /></Protected>} />
         </Routes>
+        <BugReportLauncher />
       </AuthProvider>
       <UpgradeModal />
       <span className="fixed bottom-2 left-3 text-xs text-stone-400/60 pointer-events-none select-none tabular-nums">

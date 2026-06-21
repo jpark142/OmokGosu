@@ -24,6 +24,31 @@ class User(SQLModel, table=True):
     token_version: int = Field(default=0)
 
 
+class BugReport(SQLModel, table=True):
+    """In-app bug report. Captured by the report dialog; mirrored to a
+    GitHub Issue when the API call succeeds. The SQLite row is the source
+    of truth — `github_issue_number` is null when the API failed and the
+    report exists only locally."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    # True when the reporter ticked "익명으로 보내기" — Issue body omits
+    # username/user_id but we still record them locally for de-spamming /
+    # follow-up. Logged-out reporters have user_id=null regardless.
+    anonymous: bool = Field(default=False)
+    # Server version at the time of the report, so a regression that snuck
+    # in on a deploy is easy to spot in the issue stream.
+    version: str = Field(max_length=32)
+    # Browser context the reporter was looking at.
+    url: str = Field(default="", max_length=512)
+    user_agent: str = Field(default="", max_length=512)
+    description: str = Field(max_length=4000)
+    # Set after a successful GitHub Issues API call. Null if the API was
+    # unreachable or the token was revoked.
+    github_issue_number: Optional[int] = Field(default=None)
+    github_issue_url: Optional[str] = Field(default=None, max_length=512)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class Match(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     game_id: str = Field(index=True, max_length=32)

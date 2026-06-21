@@ -58,3 +58,26 @@ export function getLeaderboard(limit = 20): Promise<Leaderboard> {
 export function getUser(userId: number): Promise<UserSummary> {
   return http.get<UserSummary>(`/api/users/${userId}`);
 }
+
+// ---------- Bug reports ----------
+
+export interface BugReportRequest {
+  description: string;
+  url?: string;
+  user_agent?: string;
+  anonymous?: boolean;
+}
+
+export interface BugReportResponse {
+  id: number;
+  github_issue_number: number | null;
+  github_issue_url: string | null;
+  mirrored: "github" | "local_only";
+}
+
+export function submitBugReport(req: BugReportRequest): Promise<BugReportResponse> {
+  return http.post<BugReportResponse>(
+    "/api/bug-reports",
+    req as unknown as Record<string, unknown>,
+  );
+}
