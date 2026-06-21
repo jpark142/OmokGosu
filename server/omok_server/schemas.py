@@ -201,7 +201,13 @@ class Leaderboard(BaseModel):
 
 
 class AuthCredentials(BaseModel):
-    username: str = Field(min_length=2, max_length=24)
+    # Pydantic checks code-point bounds only; the substantive rules
+    # (charset whitelist + display-width 4-12) live in auth.username_rules
+    # and surface as 400 with a Korean message at the register endpoint.
+    # min_length=1 here is a permissive floor — the width-based "≥ 2
+    # Korean chars" check supersedes it. max_length=12 catches obvious
+    # overflows before the validator runs.
+    username: str = Field(min_length=1, max_length=12)
     password: str = Field(min_length=4, max_length=128)
 
 

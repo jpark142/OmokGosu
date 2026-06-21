@@ -14,7 +14,7 @@ from starlette.websockets import WebSocketDisconnect
 
 
 def _u() -> str:
-    return f"user_{uuid.uuid4().hex[:8]}"
+    return f"u{uuid.uuid4().hex[:10]}"
 
 
 def _register(client) -> tuple[str, dict, str]:

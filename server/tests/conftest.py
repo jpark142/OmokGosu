@@ -40,8 +40,10 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def unique_username(prefix: str = "user") -> str:
-    return f"{prefix}_{uuid.uuid4().hex[:8]}"
+def unique_username(prefix: str = "u") -> str:
+    # Username rules disallow underscores; "u" + 10 hex stays under the
+    # 12-char width budget and gives 1e12 collision space per prefix.
+    return f"{prefix}{uuid.uuid4().hex[:10]}"
 
 
 @pytest.fixture

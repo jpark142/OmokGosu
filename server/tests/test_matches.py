@@ -12,7 +12,7 @@ from omok_server.db.models import Match
 
 
 def _u() -> str:
-    return f"user_{uuid.uuid4().hex[:8]}"
+    return f"u{uuid.uuid4().hex[:10]}"
 
 
 def _register(client):

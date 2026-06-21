@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 
 from omok_server.auth.deps import get_current_user, get_db_session
 from omok_server.auth.security import create_access_token, hash_password, verify_password
+from omok_server.auth.username_rules import UsernameError, validate_username
 from omok_server.db.models import User
 from omok_server.schemas import AuthCredentials, AuthResponse, UserSummary
 from omok_server.ws.registry import registry as ws_registry
@@ -41,10 +42,14 @@ def register(
     body: AuthCredentials,
     session: Annotated[Session, Depends(get_db_session)],
 ) -> AuthResponse:
-    existing = session.exec(select(User).where(User.username == body.username)).first()
+    try:
+        username = validate_username(body.username)
+    except UsernameError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    existing = session.exec(select(User).where(User.username == username)).first()
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username already taken")
-    user = User(username=body.username, password_hash=hash_password(body.password))
+    user = User(username=username, password_hash=hash_password(body.password))
     session.add(user)
     session.commit()
     session.refresh(user)

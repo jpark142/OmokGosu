@@ -5,7 +5,7 @@ import uuid
 
 
 def _u() -> str:
-    return f"user_{uuid.uuid4().hex[:8]}"
+    return f"u{uuid.uuid4().hex[:10]}"
 
 
 def test_register_login_me_happy_path(client) -> None:
@@ -59,6 +59,45 @@ def test_me_rejects_garbage_token(client) -> None:
 def test_register_validates_short_password(client) -> None:
     r = client.post("/api/auth/register", json={"username": _u(), "password": "ab"})
     assert r.status_code == 422  # Pydantic min_length=4
+
+
+def test_register_rejects_username_with_special_chars(client) -> None:
+    r = client.post(
+        "/api/auth/register",
+        json={"username": "user_1", "password": "pw1234"},
+    )
+    assert r.status_code == 400
+    assert "특수문자" in r.json()["detail"]
+
+
+def test_register_rejects_username_too_wide(client) -> None:
+    # 7 Korean chars = width 14 — exceeds 12-unit budget.
+    r = client.post(
+        "/api/auth/register",
+        json={"username": "가나다라마바사", "password": "pw1234"},
+    )
+    # Pydantic max_length=12 (code points) rejects 7-char string? No,
+    # 7 < 12 in code points. So this falls through to our custom width
+    # validator → 400.
+    assert r.status_code == 400
+    assert "6자" in r.json()["detail"]
+
+
+def test_register_accepts_6_korean_chars(client) -> None:
+    import uuid
+    # Mix uuid into the start so each test run produces a unique row.
+    name = f"가나{uuid.uuid4().hex[:2]}"  # 4 chars, width 6 — clearly valid
+    r = client.post("/api/auth/register", json={"username": name, "password": "pw1234"})
+    assert r.status_code == 201, r.text
+    assert r.json()["user"]["username"] == name
+
+
+def test_register_accepts_12_latin_chars(client) -> None:
+    import uuid
+    name = f"u{uuid.uuid4().hex[:11]}"  # exactly 12 chars
+    assert len(name) == 12
+    r = client.post("/api/auth/register", json={"username": name, "password": "pw1234"})
+    assert r.status_code == 201, r.text
 
 
 def test_me_returns_current_room_id(client) -> None:

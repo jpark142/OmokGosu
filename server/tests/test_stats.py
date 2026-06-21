@@ -14,7 +14,7 @@ from omok_server.services.stats import record_match
 
 
 def _u() -> str:
-    return f"user_{uuid.uuid4().hex[:8]}"
+    return f"u{uuid.uuid4().hex[:10]}"
 
 
 def _make_user(username: str) -> int:

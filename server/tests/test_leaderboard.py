@@ -11,7 +11,7 @@ from omok_server.db.models import User
 
 
 def _u() -> str:
-    return f"u_{uuid.uuid4().hex[:8]}"
+    return f"u{uuid.uuid4().hex[:10]}"
 
 
 def _register(client):
