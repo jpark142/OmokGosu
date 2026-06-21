@@ -33,6 +33,14 @@ class WsRegistry:
         # (not on every additional tab they open). Subscribers do their own
         # broadcasting; we only signal "presence set changed".
         self._presence_listeners: list[PresenceListener] = []
+        # Strong refs to in-flight listener tasks. `asyncio.create_task` only
+        # keeps weak refs in the event loop, so a task whose handle we drop
+        # can be garbage-collected mid-execution (Python 3.11+ docs warn
+        # about this). We hold strong refs here and clear them on completion.
+        # Observed in the wild: lobby reconnect after a back-navigation lost
+        # its presence broadcast because the create_task was GC'd before
+        # the broadcast ran.
+        self._pending_tasks: set[asyncio.Task] = set()
 
     async def register(self, user_id: int, ws: WebSocket) -> None:
         async with self._lock:
@@ -82,11 +90,18 @@ class WsRegistry:
         # deadlock against the close ack (TestClient and real browser
         # clients alike), so we schedule the listener on the event loop
         # and let it run after the handler exits.
+        #
+        # NB: keep a strong reference to each task in `_pending_tasks`.
+        # `asyncio.create_task` returns a Task the loop only weakly
+        # references; without a strong ref the GC can collect it mid-run.
+        # `add_done_callback` cleans up after completion.
         for cb in list(self._presence_listeners):
             try:
-                asyncio.create_task(cb())
+                task = asyncio.create_task(cb())
             except Exception:
-                pass
+                continue
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._pending_tasks.discard)
 
 
 registry = WsRegistry()
