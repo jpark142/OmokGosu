@@ -96,9 +96,12 @@ async def logout(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> None:
-    """Stateless JWT — there's no server-side session to invalidate. The point
-    of this endpoint is to leave all rooms the user is currently in so logging
-    out also deletes any room they host."""
+    """Stateless JWT — there's no server-side session to invalidate. We do
+    two cleanup steps so the user actually disappears from peer-facing UI:
+    leave any rooms they're hosting/joining, and force-close every open WS
+    they own so the lobby presence panel reflects them as offline right
+    away (without waiting for the client to tear down its own sockets)."""
     from omok_server.api.rooms import leave_all_rooms_for_user
 
     await leave_all_rooms_for_user(user.id, db=session)
+    await ws_registry.close_all(user.id, code=4401)

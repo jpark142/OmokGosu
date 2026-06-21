@@ -46,6 +46,29 @@ def unique_username(prefix: str = "u") -> str:
     return f"{prefix}{uuid.uuid4().hex[:10]}"
 
 
+# Message types that the lobby WS pushes proactively on every connect or
+# whenever the online set changes, but which most tests don't care about.
+# Tests that only want lobby_snapshot or a chat round-trip can use
+# `drain_lobby_housekeeping` to skip past them.
+_LOBBY_HOUSEKEEPING_TYPES = {"chat_history", "presence"}
+
+
+def drain_lobby_housekeeping(ws, *, until_type: str | None = None):
+    """Pull and discard background frames (presence, chat_history) until the
+    next "real" message arrives — i.e. one whose `type` is not in the
+    housekeeping set. If `until_type` is given, also pulls past anything
+    that doesn't match it.
+    """
+    while True:
+        m = ws.receive_json()
+        t = m.get("type")
+        if t in _LOBBY_HOUSEKEEPING_TYPES:
+            continue
+        if until_type is not None and t != until_type:
+            continue
+        return m
+
+
 @pytest.fixture
 def auth_client(client: TestClient) -> tuple[TestClient, str, dict]:
     """Register a fresh user and return (client, token, user_dict).

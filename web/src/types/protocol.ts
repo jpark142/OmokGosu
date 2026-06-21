@@ -185,6 +185,20 @@ export type ServerRoomMsg =
   | ChatEnvelope
   | ChatHistoryEnvelope;
 
+// Lobby presence panel
+export interface OnlinePresenceUser {
+  user_id: number;
+  username: string;
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+export interface PresenceEnvelope {
+  type: "presence";
+  users: OnlinePresenceUser[];
+}
+
 // Chat — shared across lobby/room/game channels
 export interface ChatMessage {
   user_id: number;       // 0 = system
@@ -217,6 +231,7 @@ export type ServerLobbyMsg =
     }
   | ChatEnvelope
   | ChatHistoryEnvelope
+  | PresenceEnvelope
   | { type: "pong" };
 
 export interface ClockSnapshot {

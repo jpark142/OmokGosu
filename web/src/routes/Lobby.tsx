@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import AIPlayDialog from "@/components/AIPlayDialog";
 import Chat from "@/components/Chat";
 import CreateRoomDialog from "@/components/CreateRoomDialog";
+import OnlineUsersPanel from "@/components/OnlineUsersPanel";
 import RoomCard from "@/components/RoomCard";
 import { useLobbySocket } from "@/hooks/useLobbySocket";
 import { createGame, createRoom, joinRoom } from "@/lib/api";
@@ -19,7 +20,7 @@ import type {
 export default function Lobby() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { rooms, connected, chat, sendChat } = useLobbySocket();
+  const { rooms, connected, chat, presence, sendChat } = useLobbySocket();
   const [createOpen, setCreateOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -109,7 +110,8 @@ export default function Lobby() {
 
   return (
     <div className="min-h-screen p-4 md:p-6 bg-stone-50">
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_18rem] gap-6">
+        <div className="space-y-6 min-w-0">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
@@ -217,6 +219,12 @@ export default function Lobby() {
           disabled={!connected}
           size="lg"
         />
+        </div>
+
+        {/* Right rail: live online users */}
+        <aside className="lg:sticky lg:top-6 lg:self-start">
+          <OnlineUsersPanel users={presence} />
+        </aside>
       </div>
 
       <CreateRoomDialog

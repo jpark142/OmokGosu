@@ -2,12 +2,18 @@ import { useEffect, useRef, useState } from "react";
 
 import { getToken, handleWsUnauthorized } from "@/lib/fetcher";
 import { CLIENT_VERSION } from "@/lib/version";
-import type { ChatMessage, RoomSummary, ServerLobbyMsg } from "@/types/protocol";
+import type {
+  ChatMessage,
+  OnlinePresenceUser,
+  RoomSummary,
+  ServerLobbyMsg,
+} from "@/types/protocol";
 
 export interface LobbySocketState {
   rooms: RoomSummary[];
   connected: boolean;
   chat: ChatMessage[];
+  presence: OnlinePresenceUser[];
   sendChat: (text: string) => void;
 }
 
@@ -15,6 +21,7 @@ export function useLobbySocket(): LobbySocketState {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [connected, setConnected] = useState(false);
   const [chat, setChat] = useState<ChatMessage[]>([]);
+  const [presence, setPresence] = useState<OnlinePresenceUser[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -49,6 +56,8 @@ export function useLobbySocket(): LobbySocketState {
               if (msg.action === "removed" || msg.room === null) return without;
               return [...without, msg.room].sort((a, b) => b.created_at - a.created_at);
             });
+          } else if (msg.type === "presence") {
+            setPresence(msg.users);
           } else if (msg.type === "chat_history") {
             setChat(msg.messages);
           } else if (msg.type === "chat") {
@@ -97,5 +106,5 @@ export function useLobbySocket(): LobbySocketState {
     }
   };
 
-  return { rooms, connected, chat, sendChat };
+  return { rooms, connected, chat, presence, sendChat };
 }

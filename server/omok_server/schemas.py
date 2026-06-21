@@ -340,6 +340,27 @@ class SChatMsg(BaseModel):
     role: Literal["player", "spectator"] = "player"
 
 
+class OnlinePresenceUser(BaseModel):
+    """One row of the lobby's "현재 접속 중" panel.
+
+    Same shape as `UserSummary`'s public fields but without `current_room_id`
+    — the presence list is intentionally just identity + stats; viewers can
+    click "전적 보기" to jump to the full profile if they want more.
+    """
+    user_id: int
+    username: str
+    wins: int
+    losses: int
+    draws: int
+
+
+class SPresenceMsg(BaseModel):
+    """Live online-users snapshot. Sent by /ws/lobby whenever the online set
+    changes, and once immediately on connect so the panel hydrates."""
+    type: Literal["presence"] = "presence"
+    users: list[OnlinePresenceUser]
+
+
 class SChatHistoryMsg(BaseModel):
     """Sent once to a freshly connected client so they can see recent
     conversation. Subsequent live messages arrive as individual SChatMsg."""

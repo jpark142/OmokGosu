@@ -32,7 +32,8 @@ def _register(client):
 def test_lobby_chat_round_trip(client) -> None:
     tok, user = _register(client)
     with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
-        ws.receive_json()  # lobby_snapshot (no chat_history since buffer is empty)
+        ws.receive_json()  # lobby_snapshot
+        ws.receive_json()  # presence frame (online users on connect) (no chat_history since buffer is empty)
 
         ws.send_text(json.dumps({"type": "chat", "text": "hello"}))
         msg = ws.receive_json()
@@ -46,6 +47,7 @@ def test_chat_empty_text_is_rejected(client) -> None:
     tok, _ = _register(client)
     with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
+        ws.receive_json()  # presence frame (online users on connect)
         ws.send_text(json.dumps({"type": "chat", "text": "   "}))
         # No broadcast — send a ping and verify only pong comes back.
         ws.send_text(json.dumps({"type": "ping"}))
@@ -57,16 +59,20 @@ def test_chat_history_includes_recent_messages(client) -> None:
     tok, _ = _register(client)
     with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
+        ws.receive_json()  # presence frame (online users on connect)
         ws.send_text(json.dumps({"type": "chat", "text": "first"}))
         ws.receive_json()  # the broadcast
         ws.send_text(json.dumps({"type": "chat", "text": "second"}))
         ws.receive_json()
 
-    # New connection: lobby_snapshot then chat_history with both messages.
+    # New connection: lobby_snapshot then chat_history then presence.
+    # chat_history goes before presence because handler sends them in that
+    # order (chat_history before ws_registry.register, presence after).
     with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
         history = ws.receive_json()
         assert history["type"] == "chat_history"
+        ws.receive_json()  # presence frame
         texts = [m["text"] for m in history["messages"]]
         assert "first" in texts and "second" in texts
 
@@ -76,6 +82,7 @@ def test_chat_length_capped(client) -> None:
     long_text = "a" * 500
     with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
+        ws.receive_json()  # presence frame (online users on connect)
         ws.send_text(json.dumps({"type": "chat", "text": long_text}))
         msg = ws.receive_json()
         assert msg["type"] == "chat"
@@ -88,6 +95,7 @@ def test_chat_masks_profanity_with_asterisks(client) -> None:
     tok, _ = _register(client)
     with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
+        ws.receive_json()  # presence frame (online users on connect)
 
         ws.send_text(json.dumps({"type": "chat", "text": "안녕"}))
         clean = ws.receive_json()
@@ -107,6 +115,7 @@ def test_chat_spam_triggers_3min_mute_and_system_announce(client) -> None:
     tok, user = _register(client)
     with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
+        ws.receive_json()  # presence frame (online users on connect)
 
         # First 5 messages broadcast normally.
         for i in range(5):
@@ -151,6 +160,7 @@ def test_room_chat_isolated_from_lobby(client) -> None:
     with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         first = ws.receive_json()
         assert first["type"] == "lobby_snapshot"
+        ws.receive_json()  # presence frame
         # Send a ping to confirm there's nothing else queued.
         ws.send_text(json.dumps({"type": "ping"}))
         nxt = ws.receive_json()

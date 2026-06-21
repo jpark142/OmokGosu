@@ -31,9 +31,11 @@ def _hdr(tok: str) -> dict:
 
 
 def _recv_skip_chat(ws):
+    """Drain background frames (chat, chat_history, presence) until a
+    test-relevant message arrives."""
     while True:
         msg = ws.receive_json()
-        if msg.get("type") in ("chat", "chat_history"):
+        if msg.get("type") in ("chat", "chat_history", "presence"):
             continue
         return msg
 
