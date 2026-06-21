@@ -62,10 +62,10 @@ export function useRoomSocket(roomId: string | undefined): RoomSocketState {
           else if (msg.type === "kicked") setKickedUserId(msg.user_id);
           else if (msg.type === "chat_history") setChat(msg.messages);
           else if (msg.type === "chat") {
-            const { user_id, username, text, server_time_ms, is_system, role, is_blurred } = msg;
+            const { user_id, username, text, server_time_ms, is_system, role } = msg;
             setChat((prev) => [
               ...prev,
-              { user_id, username, text, server_time_ms, is_system, role, is_blurred },
+              { user_id, username, text, server_time_ms, is_system, role },
             ]);
           }
           for (const l of listenersRef.current) l(msg);

@@ -325,18 +325,13 @@ class SChatMsg(BaseModel):
     type: Literal["chat"] = "chat"
     user_id: int                     # 0 reserved for system messages
     username: str                    # "시스템" for system messages
-    text: str
+    text: str                        # already masked by services.chat_filter for profanity
     server_time_ms: int
     is_system: bool = False          # True → rendered differently by the client
     # Role drives display: spectators get a "[관전]" prefix in the chat UI.
     # System messages keep role="player" — is_system already routes them
     # through a separate render path. Default kept for backward compat.
     role: Literal["player", "spectator"] = "player"
-    # True when the server's chat filter flagged the text as profanity or
-    # sexually explicit. The client renders the text with a CSS blur and
-    # a click-to-reveal interaction so the timeline isn't punctured by the
-    # message disappearing entirely.
-    is_blurred: bool = False
 
 
 class SChatHistoryMsg(BaseModel):

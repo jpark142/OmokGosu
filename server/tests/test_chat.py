@@ -82,8 +82,9 @@ def test_chat_length_capped(client) -> None:
         assert len(msg["text"]) <= 200
 
 
-def test_chat_blurs_profanity(client) -> None:
-    """Profane messages are still broadcast, but tagged is_blurred=True."""
+def test_chat_masks_profanity_with_asterisks(client) -> None:
+    """Profane messages are still broadcast, but the bad word is replaced
+    with asterisks on the server — the original text never reaches viewers."""
     tok, _ = _register(client)
     with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
@@ -91,14 +92,14 @@ def test_chat_blurs_profanity(client) -> None:
         ws.send_text(json.dumps({"type": "chat", "text": "안녕"}))
         clean = ws.receive_json()
         assert clean["type"] == "chat"
-        assert clean.get("is_blurred", False) is False
+        assert clean["text"] == "안녕"
 
         ws.send_text(json.dumps({"type": "chat", "text": "이 시발 진짜"}))
         dirty = ws.receive_json()
         assert dirty["type"] == "chat"
-        assert dirty["is_blurred"] is True
-        # Text is preserved on the wire so the viewer can opt-in to reveal.
-        assert "시발" in dirty["text"]
+        # Bad word masked, surrounding text preserved.
+        assert "시발" not in dirty["text"]
+        assert dirty["text"] == "이 ** 진짜"
 
 
 def test_chat_spam_triggers_3min_mute_and_system_announce(client) -> None:

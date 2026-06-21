@@ -13,7 +13,7 @@ from typing import Awaitable, Callable
 
 from omok_server.db.models import User
 from omok_server.schemas import SChatHistoryMsg, SChatMsg
-from omok_server.services.chat_filter import should_blur
+from omok_server.services.chat_filter import mask_bad_words
 
 CHAT_BUFFER_SIZE = 50
 MAX_MESSAGE_LEN = 200
@@ -200,10 +200,9 @@ async def handle_incoming_chat(
     payload = SChatMsg(
         user_id=user.id,
         username=user.username,
-        text=text,
+        text=mask_bad_words(text),
         server_time_ms=int(now * 1000),
         role=role,
-        is_blurred=should_blur(text),
     ).model_dump()
 
     _key_buffer(key).append(payload)

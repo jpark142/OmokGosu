@@ -189,15 +189,12 @@ export type ServerRoomMsg =
 export interface ChatMessage {
   user_id: number;       // 0 = system
   username: string;      // "시스템" for system messages
-  text: string;
+  text: string;          // server already masked profanity with asterisks
   server_time_ms: number;
   is_system?: boolean;
   // "player" for participants, "spectator" for live game viewers. System
   // messages keep the default — is_system already routes them separately.
   role?: "player" | "spectator";
-  // Server flagged this message as profanity / sexual content. The client
-  // renders the text under a CSS blur until the viewer clicks to reveal.
-  is_blurred?: boolean;
 }
 
 export interface ChatHistoryEnvelope {
