@@ -44,10 +44,14 @@ class WsRegistry:
 
     async def register(self, user_id: int, ws: WebSocket) -> None:
         async with self._lock:
-            became_online = user_id not in self._by_user or not self._by_user[user_id]
             self._by_user[user_id].add(ws)
-        if became_online:
-            await self._notify_presence()
+        # Always notify — a "transition only" check (was offline → now online)
+        # silently loses presence frames under reconnect races: when an old
+        # socket hasn't been removed yet, the new socket's register call sees
+        # the user as still online and skips the broadcast. Notifying on
+        # every connect costs an extra small payload per duplicate tab but
+        # makes the panel reliably reflect reality.
+        await self._notify_presence()
 
     async def unregister(self, user_id: int, ws: WebSocket) -> None:
         async with self._lock:
@@ -55,11 +59,11 @@ class WsRegistry:
             if sockets is None:
                 return
             sockets.discard(ws)
-            went_offline = not sockets
-            if went_offline:
+            if not sockets:
                 self._by_user.pop(user_id, None)
-        if went_offline:
-            await self._notify_presence()
+        # Same reasoning as register: notify unconditionally so a reconnect
+        # race can't drop the "user is gone" frame either.
+        await self._notify_presence()
 
     async def close_all(self, user_id: int, *, code: int = 4401) -> int:
         """Close every socket owned by `user_id`. Returns number of sockets closed."""
