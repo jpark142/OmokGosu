@@ -98,6 +98,17 @@ async def lobby_ws(ws: WebSocket):
                         {"type": "error", "message": "잠시 후 다시 시도하세요."},
                         default=str,
                     ))
+                elif result == chat_helpers.ChatResult.SPAM_MUTED:
+                    await ws.send_text(json.dumps(
+                        {"type": "error", "message": "도배 감지 — 3분간 채팅이 금지됩니다."},
+                        default=str,
+                    ))
+                elif result == chat_helpers.ChatResult.MUTED:
+                    remain = chat_helpers.mute_remaining_s(_LOBBY_CHAT_KEY, user.id)
+                    await ws.send_text(json.dumps(
+                        {"type": "error", "message": f"채팅 금지 중 — {int(remain)+1}초 후 다시 시도하세요."},
+                        default=str,
+                    ))
                 continue
             # Other client messages are ignored on the lobby channel.
     except WebSocketDisconnect:

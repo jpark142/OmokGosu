@@ -332,6 +332,11 @@ class SChatMsg(BaseModel):
     # System messages keep role="player" — is_system already routes them
     # through a separate render path. Default kept for backward compat.
     role: Literal["player", "spectator"] = "player"
+    # True when the server's chat filter flagged the text as profanity or
+    # sexually explicit. The client renders the text with a CSS blur and
+    # a click-to-reveal interaction so the timeline isn't punctured by the
+    # message disappearing entirely.
+    is_blurred: bool = False
 
 
 class SChatHistoryMsg(BaseModel):

@@ -31,7 +31,7 @@ def _register(client):
 
 def test_lobby_chat_round_trip(client) -> None:
     tok, user = _register(client)
-    with client.websocket_connect(f"/ws/lobby?token={tok}&client_version=1.0.0") as ws:
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot (no chat_history since buffer is empty)
 
         ws.send_text(json.dumps({"type": "chat", "text": "hello"}))
@@ -44,7 +44,7 @@ def test_lobby_chat_round_trip(client) -> None:
 
 def test_chat_empty_text_is_rejected(client) -> None:
     tok, _ = _register(client)
-    with client.websocket_connect(f"/ws/lobby?token={tok}&client_version=1.0.0") as ws:
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
         ws.send_text(json.dumps({"type": "chat", "text": "   "}))
         # No broadcast — send a ping and verify only pong comes back.
@@ -55,7 +55,7 @@ def test_chat_empty_text_is_rejected(client) -> None:
 
 def test_chat_history_includes_recent_messages(client) -> None:
     tok, _ = _register(client)
-    with client.websocket_connect(f"/ws/lobby?token={tok}&client_version=1.0.0") as ws:
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
         ws.send_text(json.dumps({"type": "chat", "text": "first"}))
         ws.receive_json()  # the broadcast
@@ -63,7 +63,7 @@ def test_chat_history_includes_recent_messages(client) -> None:
         ws.receive_json()
 
     # New connection: lobby_snapshot then chat_history with both messages.
-    with client.websocket_connect(f"/ws/lobby?token={tok}&client_version=1.0.0") as ws:
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
         history = ws.receive_json()
         assert history["type"] == "chat_history"
@@ -74,12 +74,63 @@ def test_chat_history_includes_recent_messages(client) -> None:
 def test_chat_length_capped(client) -> None:
     tok, _ = _register(client)
     long_text = "a" * 500
-    with client.websocket_connect(f"/ws/lobby?token={tok}&client_version=1.0.0") as ws:
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         ws.receive_json()  # lobby_snapshot
         ws.send_text(json.dumps({"type": "chat", "text": long_text}))
         msg = ws.receive_json()
         assert msg["type"] == "chat"
         assert len(msg["text"]) <= 200
+
+
+def test_chat_blurs_profanity(client) -> None:
+    """Profane messages are still broadcast, but tagged is_blurred=True."""
+    tok, _ = _register(client)
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
+        ws.receive_json()  # lobby_snapshot
+
+        ws.send_text(json.dumps({"type": "chat", "text": "안녕"}))
+        clean = ws.receive_json()
+        assert clean["type"] == "chat"
+        assert clean.get("is_blurred", False) is False
+
+        ws.send_text(json.dumps({"type": "chat", "text": "이 시발 진짜"}))
+        dirty = ws.receive_json()
+        assert dirty["type"] == "chat"
+        assert dirty["is_blurred"] is True
+        # Text is preserved on the wire so the viewer can opt-in to reveal.
+        assert "시발" in dirty["text"]
+
+
+def test_chat_spam_triggers_3min_mute_and_system_announce(client) -> None:
+    """Sending 6 messages within ~5s on one channel mutes the user for 3 min."""
+    tok, user = _register(client)
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
+        ws.receive_json()  # lobby_snapshot
+
+        # First 5 messages broadcast normally.
+        for i in range(5):
+            ws.send_text(json.dumps({"type": "chat", "text": f"m{i}"}))
+            ack = ws.receive_json()
+            assert ack["type"] == "chat" and ack["text"] == f"m{i}"
+
+        # 6th message trips the spam detector. We expect:
+        #   (a) a system chat message announcing the mute, broadcast to everyone
+        #   (b) an error response to the sender ("도배 감지 — 3분간...")
+        # The order of (a) and (b) is implementation detail; assert both arrive.
+        ws.send_text(json.dumps({"type": "chat", "text": "spam"}))
+        received = [ws.receive_json(), ws.receive_json()]
+        types = {m["type"]: m for m in received}
+        assert "chat" in types and "error" in types
+        sysmsg = types["chat"]
+        assert sysmsg["is_system"] is True
+        assert "도배" in sysmsg["text"] and user["username"] in sysmsg["text"]
+        assert "도배" in types["error"]["message"]
+
+        # A follow-up message during the mute is also blocked (different error).
+        ws.send_text(json.dumps({"type": "chat", "text": "still here"}))
+        blocked = ws.receive_json()
+        assert blocked["type"] == "error"
+        assert "채팅 금지 중" in blocked["message"]
 
 
 def test_room_chat_isolated_from_lobby(client) -> None:
@@ -89,14 +140,14 @@ def test_room_chat_isolated_from_lobby(client) -> None:
                       headers={"Authorization": f"Bearer {tok}"}).json()["room_id"]
 
     # Send room chat.
-    with client.websocket_connect(f"/ws/rooms/{rid}?token={tok}&client_version=1.0.0") as ws:
+    with client.websocket_connect(f"/ws/rooms/{rid}?token={tok}") as ws:
         ws.receive_json()  # room_state
         ws.send_text(json.dumps({"type": "chat", "text": "room-only"}))
         msg = ws.receive_json()
         assert msg["type"] == "chat" and msg["text"] == "room-only"
 
     # New lobby connection: empty lobby buffer → no chat_history at all.
-    with client.websocket_connect(f"/ws/lobby?token={tok}&client_version=1.0.0") as ws:
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
         first = ws.receive_json()
         assert first["type"] == "lobby_snapshot"
         # Send a ping to confirm there's nothing else queued.

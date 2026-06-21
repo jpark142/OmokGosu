@@ -52,10 +52,10 @@ export function useLobbySocket(): LobbySocketState {
           } else if (msg.type === "chat_history") {
             setChat(msg.messages);
           } else if (msg.type === "chat") {
-            const { user_id, username, text, server_time_ms, is_system, role } = msg;
+            const { user_id, username, text, server_time_ms, is_system, role, is_blurred } = msg;
             setChat((prev) => [
               ...prev,
-              { user_id, username, text, server_time_ms, is_system, role },
+              { user_id, username, text, server_time_ms, is_system, role, is_blurred },
             ]);
           }
         } catch {

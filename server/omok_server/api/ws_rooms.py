@@ -139,6 +139,11 @@ async def room_ws(ws: WebSocket, room_id: str):
                 )
                 if result == chat_helpers.ChatResult.RATE_LIMITED:
                     await _send_json(ws, SErrorMsg(message="잠시 후 다시 시도하세요."))
+                elif result == chat_helpers.ChatResult.SPAM_MUTED:
+                    await _send_json(ws, SErrorMsg(message="도배 감지 — 3분간 채팅이 금지됩니다."))
+                elif result == chat_helpers.ChatResult.MUTED:
+                    remain = chat_helpers.mute_remaining_s(f"room:{room_id}", user.id)
+                    await _send_json(ws, SErrorMsg(message=f"채팅 금지 중 — {int(remain)+1}초 후 다시 시도하세요."))
                 continue
 
             if mtype == "ready":

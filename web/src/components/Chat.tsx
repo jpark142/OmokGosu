@@ -44,6 +44,10 @@ export default function Chat({
 }: Props) {
   const { user } = useAuth();
   const [text, setText] = useState("");
+  // Indices of blurred messages the viewer has opted to reveal. Keyed by
+  // index — fine because the list is append-only within a session and we
+  // don't need to persist across reloads.
+  const [revealedIdx, setRevealedIdx] = useState<Set<number>>(() => new Set());
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll on new messages.
@@ -91,6 +95,8 @@ export default function Chat({
             }
             const isMe = user?.id === m.user_id;
             const isSpectator = m.role === "spectator";
+            const isBlurred = !!m.is_blurred;
+            const revealed = revealedIdx.has(i);
             return (
               <div key={i} className="flex gap-2 items-baseline">
                 <span className="text-[10px] text-stone-400 w-14 shrink-0 font-mono">
@@ -108,7 +114,27 @@ export default function Chat({
                 >
                   {m.username}
                 </Link>
-                <span className="text-stone-700 break-words min-w-0">{m.text}</span>
+                {isBlurred && !revealed ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRevealedIdx((prev) => {
+                        const next = new Set(prev);
+                        next.add(i);
+                        return next;
+                      })
+                    }
+                    className="text-stone-500 italic break-words min-w-0 text-left hover:text-stone-700 underline decoration-dotted underline-offset-2"
+                    title="클릭하면 메시지가 표시됩니다"
+                  >
+                    <span className="blur-sm select-none" aria-hidden>
+                      {m.text}
+                    </span>
+                    <span className="ml-1 text-[10px] not-italic text-stone-400">(클릭)</span>
+                  </button>
+                ) : (
+                  <span className="text-stone-700 break-words min-w-0">{m.text}</span>
+                )}
               </div>
             );
           })

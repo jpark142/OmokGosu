@@ -195,6 +195,9 @@ export interface ChatMessage {
   // "player" for participants, "spectator" for live game viewers. System
   // messages keep the default — is_system already routes them separately.
   role?: "player" | "spectator";
+  // Server flagged this message as profanity / sexual content. The client
+  // renders the text under a CSS blur until the viewer clicks to reveal.
+  is_blurred?: boolean;
 }
 
 export interface ChatHistoryEnvelope {
