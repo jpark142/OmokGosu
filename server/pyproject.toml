@@ -11,6 +11,9 @@ dependencies = [
     "sqlmodel>=0.0.16",
     "bcrypt>=4.0",
     "pyjwt>=2.8",
+    # services.github_issues posts to the GitHub Issues API; httpx is the
+    # async HTTP client. Production-required, not a dev-only extra.
+    "httpx>=0.27",
 ]
 # Note: `omok_core` (the C++ pybind11 module) is installed separately by
 # scripts/bootstrap.ps1 via the top-level pyproject.toml. It's not on PyPI.
@@ -19,7 +22,6 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
-    "httpx>=0.27",
 ]
 
 [build-system]
