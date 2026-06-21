@@ -17,30 +17,6 @@ interface Props {
 
 const MAX_LEN = 4000;
 
-// "Report on GitHub" fallback link — prefills the issue form with the
-// same context fields so a developer-savvy reporter can submit directly
-// to the public tracker without going through our API.
-function buildGithubIssueUrl(opts: {
-  description: string;
-  url: string;
-  userAgent: string;
-  username: string | undefined;
-}): string {
-  const body =
-    `**제보자**: ${opts.username ? `@${opts.username}` : "(미로그인)"}\n` +
-    `**클라이언트 버전**: \`${CLIENT_VERSION}\`\n` +
-    `**URL**: \`${opts.url}\`\n` +
-    `**브라우저**: \`${opts.userAgent}\`\n\n` +
-    `---\n\n` +
-    opts.description;
-  const params = new URLSearchParams({
-    title: opts.description.split("\n")[0]?.slice(0, 80) ?? "버그 제보",
-    body,
-    labels: "bug",
-  });
-  return `https://github.com/jpark142/OmokGosu/issues/new?${params}`;
-}
-
 export default function BugReportDialog({ open, onClose }: Props) {
   const { user } = useAuth();
   const [description, setDescription] = useState("");
@@ -99,13 +75,6 @@ export default function BugReportDialog({ open, onClose }: Props) {
       setBusy(false);
     }
   };
-
-  const githubUrl = buildGithubIssueUrl({
-    description: trimmed || "(여기에 내용을 적어주세요)",
-    url: window.location.pathname + window.location.search,
-    userAgent: navigator.userAgent,
-    username: user?.username,
-  });
 
   return (
     <div
@@ -173,31 +142,21 @@ export default function BugReportDialog({ open, onClose }: Props) {
           </span>
         </label>
 
-        <div className="flex items-center justify-between pt-2">
-          <a
-            href={githubUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-stone-500 hover:text-stone-900 underline decoration-dotted"
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="px-3 py-2 text-sm text-stone-600 hover:text-stone-900 disabled:opacity-50"
           >
-            GitHub에서 직접 작성 →
-          </a>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              disabled={busy}
-              className="px-3 py-2 text-sm text-stone-600 hover:text-stone-900 disabled:opacity-50"
-            >
-              취소
-            </button>
-            <button
-              onClick={onSubmit}
-              disabled={!canSubmit}
-              className="px-4 py-2 bg-stone-900 text-white rounded text-sm font-medium hover:bg-stone-800 disabled:bg-stone-400"
-            >
-              {busy ? "보내는 중..." : "보내기"}
-            </button>
-          </div>
+            취소
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={!canSubmit}
+            className="px-4 py-2 bg-stone-900 text-white rounded text-sm font-medium hover:bg-stone-800 disabled:bg-stone-400"
+          >
+            {busy ? "보내는 중..." : "보내기"}
+          </button>
         </div>
       </div>
     </div>
