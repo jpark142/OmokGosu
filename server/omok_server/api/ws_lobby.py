@@ -1,6 +1,7 @@
 """WebSocket endpoint for the lobby: live room list updates + global chat."""
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 
@@ -28,15 +29,26 @@ class LobbyBus:
 _bus = LobbyBus()
 
 
+_BROADCAST_SEND_TIMEOUT_S = 1.0
+
+
 async def broadcast_lobby(payload: dict) -> None:
-    dead: list[WebSocket] = []
-    for ws in list(_bus.sockets):
+    body = json.dumps(payload, default=str)
+    sockets = list(_bus.sockets)
+    if not sockets:
+        return
+
+    async def _send(ws: WebSocket) -> WebSocket | None:
         try:
-            await ws.send_text(json.dumps(payload, default=str))
+            await asyncio.wait_for(ws.send_text(body), timeout=_BROADCAST_SEND_TIMEOUT_S)
+            return None
         except Exception:
-            dead.append(ws)
-    for ws in dead:
-        _bus.sockets.discard(ws)
+            return ws
+
+    results = await asyncio.gather(*(_send(ws) for ws in sockets))
+    for dead_ws in results:
+        if dead_ws is not None:
+            _bus.sockets.discard(dead_ws)
 
 
 @router.websocket("/ws/lobby")

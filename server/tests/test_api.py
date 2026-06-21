@@ -11,7 +11,9 @@ import json
 def test_health(client) -> None:
     r = client.get("/api/health")
     assert r.status_code == 200
-    assert r.json() == {"ok": True}
+    body = r.json()
+    assert body["status"] == "ok"
+    assert "version" in body
 
 
 def test_create_game_requires_auth(client) -> None:

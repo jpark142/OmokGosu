@@ -52,18 +52,29 @@ async def _send_json(ws: WebSocket, payload) -> None:
         pass
 
 
+_BROADCAST_SEND_TIMEOUT_S = 1.0
+
+
 async def broadcast_room(room_id: str, payload: dict) -> None:
     bus = _buses.get(room_id)
     if bus is None:
         return
-    dead: list[WebSocket] = []
-    for ws in list(bus.sockets):
+    body = json.dumps(payload, default=str)
+    sockets = list(bus.sockets)
+    if not sockets:
+        return
+
+    async def _send(ws: WebSocket) -> WebSocket | None:
         try:
-            await ws.send_text(json.dumps(payload, default=str))
+            await asyncio.wait_for(ws.send_text(body), timeout=_BROADCAST_SEND_TIMEOUT_S)
+            return None
         except Exception:
-            dead.append(ws)
-    for ws in dead:
-        bus.sockets.discard(ws)
+            return ws
+
+    results = await asyncio.gather(*(_send(ws) for ws in sockets))
+    for dead_ws in results:
+        if dead_ws is not None:
+            bus.sockets.discard(dead_ws)
 
 
 async def _send_room_state(room_id: str, target_ws: WebSocket | None = None) -> None:

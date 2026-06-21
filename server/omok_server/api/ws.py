@@ -40,6 +40,12 @@ router = APIRouter()
 
 TIMER_TICK_INTERVAL_MS = 250
 
+# Max time we'll wait on a single socket's send before considering it dead and
+# dropping it. Critical for the timer tick loop: a single stuck socket used to
+# block the loop indefinitely, which delayed `check_timeout()` and made
+# timeouts judged late. See history of `_broadcast` in this file.
+BROADCAST_SEND_TIMEOUT_S = 1.0
+
 
 # Per-session WS bus.
 @dataclass
@@ -74,18 +80,26 @@ async def _broadcast(game_id: str, payload) -> None:
     bus = buses.get(game_id)
     if bus is None:
         return
-    dead: list[WebSocket] = []
-    for ws in list(bus.sockets):
+    data = payload.model_dump() if hasattr(payload, "model_dump") else payload
+    body = json.dumps(data, default=str)
+    sockets = list(bus.sockets)
+    if not sockets:
+        return
+
+    async def _send(ws: WebSocket) -> WebSocket | None:
         try:
-            if hasattr(payload, "model_dump"):
-                data = payload.model_dump()
-            else:
-                data = payload
-            await ws.send_text(json.dumps(data, default=str))
+            await asyncio.wait_for(ws.send_text(body), timeout=BROADCAST_SEND_TIMEOUT_S)
+            return None
         except Exception:
-            dead.append(ws)
-    for ws in dead:
-        bus.sockets.discard(ws)
+            return ws  # timed out or threw → mark dead
+
+    # Parallel sends: one stuck/dead socket can't block delivery to the rest,
+    # and can't block the caller (e.g. the timer tick loop) past the per-socket
+    # timeout.
+    results = await asyncio.gather(*(_send(ws) for ws in sockets))
+    for dead_ws in results:
+        if dead_ws is not None:
+            bus.sockets.discard(dead_ws)
 
 
 def _now_ms() -> int:
