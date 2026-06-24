@@ -12,7 +12,7 @@ from typing import Callable
 from omok_server.schemas import ClockSnapshot, ColorStr
 
 DEFAULT_MAIN_MS = 5 * 60 * 1000  # 5 minutes
-DEFAULT_BYOYOMI_MS = 10 * 1000  # 10 seconds
+DEFAULT_BYOYOMI_MS = 20 * 1000  # 20 seconds per period
 DEFAULT_BYOYOMI_PERIODS = 3
 
 

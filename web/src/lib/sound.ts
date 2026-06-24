@@ -163,24 +163,39 @@ function pickKoreanFemaleVoice(): SpeechSynthesisVoice | null {
     return null;
   }
   const ko = all.filter((v) => v.lang === "ko-KR" || v.lang.startsWith("ko"));
-  // Known female voice names across Chrome/Edge/Safari. Anything with these
-  // tokens is preferred; the literal token "female" is a Google fallback.
-  const FEMALE_TOKENS = [
-    "female",
-    "여성",
-    "yuna",       // macOS Korean
-    "heami",      // Windows 헤미
-    "혜미",
-    "유나",
-    "sora",       // Samsung
-    "google",     // Chrome's Google 한국의 default is female
-    "kyuri",
-  ];
+  if (ko.length === 0) {
+    _cachedVoice = null;
+    return null;
+  }
   const lc = (s: string) => s.toLowerCase();
-  const female = ko.find((v) => FEMALE_TOKENS.some((t) => lc(v.name).includes(t)));
-  const fallback = female ?? ko[0] ?? null;
-  _cachedVoice = fallback;
-  return fallback;
+
+  // Priority tiers, best → worst. Edge's "Online (Natural)" voices and
+  // macOS Yuna are markedly less robotic than the older Microsoft Heami
+  // or Samsung default. Google's Chrome voice sits in the middle.
+  const tiers: Array<(v: SpeechSynthesisVoice) => boolean> = [
+    // Microsoft "Online (Natural)" neural voices on Edge — top tier.
+    // Names look like "Microsoft SunHi Online (Natural) - Korean (Korea)".
+    (v) => /natural|neural/i.test(v.name),
+    // macOS / iOS Yuna — very natural female voice.
+    (v) => lc(v.name).includes("yuna"),
+    // Chrome's built-in Google 한국의 — reasonable, female by default.
+    (v) => lc(v.name).includes("google"),
+    // Other named female voices we know about.
+    (v) => /heami|혜미|가현|kyuri|sora|seoyeon|sunhi|jimin/i.test(lc(v.name)),
+    // Anything tagged female.
+    (v) => /female|여성|woman/i.test(lc(v.name)),
+    // Final fallback: any Korean voice.
+    () => true,
+  ];
+  for (const tier of tiers) {
+    const found = ko.find(tier);
+    if (found) {
+      _cachedVoice = found;
+      return found;
+    }
+  }
+  _cachedVoice = ko[0];
+  return ko[0];
 }
 
 // Some browsers populate voices asynchronously — refresh the cache when

@@ -169,6 +169,7 @@ export default function Game() {
   //     reads — drift-free.
   const lastSpokenSecond = useRef<number | null>(null);
   const prevPeriods = useRef<number | null>(null);
+  const wasInByoyomi = useRef<boolean | null>(null);
   const announcingUntilMs = useRef<number>(0);
   useEffect(() => {
     if (!state || state.status === "OVER" || !myTurn) {
@@ -176,23 +177,33 @@ export default function Game() {
       return;
     }
     const clock = toMove === "BLACK" ? state.clocks.black : state.clocks.white;
+    const nowMs = Date.now();
+
     if (!clock.in_byoyomi) {
       prevPeriods.current = clock.byoyomi_periods;
       lastSpokenSecond.current = null;
+      wasInByoyomi.current = false;
       return;
     }
 
-    const nowMs = Date.now();
+    // Transition: just entered byo-yomi this tick. Announce it once.
+    if (wasInByoyomi.current === false) {
+      speak("초읽기를 시작합니다");
+      announcingUntilMs.current = nowMs + 1700;  // ~1.5s phrase + buffer
+      lastSpokenSecond.current = null;
+    }
+    wasInByoyomi.current = true;
+
     const periods = clock.byoyomi_periods;
 
-    // Period transition announcement.
+    // Period transition announcement (only if we were already in byo-yomi).
     if (prevPeriods.current !== null && periods < prevPeriods.current) {
       if (periods === 1) speak("마지막입니다");
       else if (periods > 0) speak(`${periods}번 남았습니다`);
       // Hold the countdown for ~1.3s so the announcement doesn't get
       // cancelled mid-word by the next number speak(). The countdown
       // resumes from whatever second the clock shows after the grace.
-      announcingUntilMs.current = nowMs + 1300;
+      announcingUntilMs.current = Math.max(announcingUntilMs.current, nowMs + 1300);
       lastSpokenSecond.current = null;
     }
     prevPeriods.current = periods;
@@ -201,6 +212,9 @@ export default function Game() {
     if (nowMs < announcingUntilMs.current) return;
 
     const secondsLeft = Math.ceil(clock.byoyomi_ms / 1000);
+    // Countdown only for the last 10 seconds of the current period. With
+    // a 20s period this means the first 10s of each period stays silent
+    // and the announcer takes over at the 10-second mark.
     if (
       secondsLeft > 0 &&
       secondsLeft <= 10 &&
