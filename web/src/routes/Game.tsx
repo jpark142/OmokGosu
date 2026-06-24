@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -8,6 +8,7 @@ import Clock from "@/components/Clock";
 import ParticipantsPanel from "@/components/ParticipantsPanel";
 import { useGameSocket } from "@/hooks/useGameSocket";
 import { useAuth } from "@/lib/auth";
+import { playMoveSound, speak } from "@/lib/sound";
 import type {
   ColorStr,
   ForbiddenReason,
@@ -134,6 +135,60 @@ export default function Game() {
   const myTurn =
     !isSpectator && myColor !== null && (myColor === "BOTH" || myColor === toMove);
   const disabled = isSpectator || !state || state.status === "OVER" || !connected || !myTurn;
+
+  // ----- audio effects -----
+  // Move click: ring the synthesized "thock" every time a stone is added.
+  // The first state snapshot (which may already contain moves from a game
+  // joined in progress) initializes the ref without playing, so a viewer
+  // doesn't get a barrage of clicks on join.
+  const prevMoveCount = useRef<number | null>(null);
+  useEffect(() => {
+    const count = state?.stones.length ?? 0;
+    if (prevMoveCount.current !== null && count > prevMoveCount.current) {
+      playMoveSound();
+    }
+    prevMoveCount.current = count;
+  }, [state?.stones.length]);
+
+  // Byo-yomi countdown + period transitions for the active side. Speak only
+  // when it's the local player's turn so opponents' clock isn't narrated
+  // into the player's ears (distracting + redundant).
+  const lastSpokenSecond = useRef<number | null>(null);
+  const prevPeriods = useRef<number | null>(null);
+  useEffect(() => {
+    if (!state || state.status === "OVER" || !myTurn) {
+      lastSpokenSecond.current = null;
+      return;
+    }
+    const clock = toMove === "BLACK" ? state.clocks.black : state.clocks.white;
+    if (!clock.in_byoyomi) {
+      // Track periods even outside byo-yomi so the first period entry is
+      // detected correctly when main time runs out.
+      prevPeriods.current = clock.byoyomi_periods;
+      lastSpokenSecond.current = null;
+      return;
+    }
+    // Period dropped since last tick (used up one byo-yomi period).
+    const periods = clock.byoyomi_periods;
+    if (prevPeriods.current !== null && periods < prevPeriods.current) {
+      if (periods === 1) speak("마지막입니다");
+      else if (periods > 0) speak(`${periods}번 남았습니다`);
+    }
+    prevPeriods.current = periods;
+
+    // Count down each whole second once. ceil rather than floor so the
+    // first "10" fires the instant the period flips into byo-yomi, not a
+    // beat later when only ~9.999s remain.
+    const secondsLeft = Math.ceil(clock.byoyomi_ms / 1000);
+    if (
+      secondsLeft > 0 &&
+      secondsLeft <= 10 &&
+      secondsLeft !== lastSpokenSecond.current
+    ) {
+      lastSpokenSecond.current = secondsLeft;
+      speak(String(secondsLeft), { rate: 1.4 });
+    }
+  }, [state, myTurn, toMove]);
 
   const onPlay = (r: number, c: number) => {
     if (!state || state.status === "OVER") return;

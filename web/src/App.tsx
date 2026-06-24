@@ -1,9 +1,13 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import { useEffect } from "react";
+
 import BugReportLauncher from "@/components/BugReportLauncher";
+import SoundToggle from "@/components/SoundToggle";
 import UpgradeBanner from "@/components/UpgradeBanner";
 import UpgradeModal from "@/components/UpgradeModal";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { hookAutoUnlock } from "@/lib/sound";
 import { CLIENT_VERSION } from "@/lib/version";
 import { VersionProvider } from "@/lib/versionContext";
 import Game from "@/routes/Game";
@@ -41,6 +45,11 @@ function PublicOnly({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  // Resume AudioContext + prime speechSynthesis on the user's first click.
+  // Browser autoplay policies block both until a gesture; piggybacking on
+  // any interaction means the very first move sound / TTS isn't lost.
+  useEffect(() => hookAutoUnlock(), []);
+
   // VersionProvider wraps everything (including AuthProvider) so version checks
   // run even on the login page — an outdated client should see the upgrade
   // modal before they even try to log in.
@@ -61,6 +70,7 @@ export default function App() {
         <BugReportLauncher />
       </AuthProvider>
       <UpgradeModal />
+      <SoundToggle />
       <span className="fixed bottom-2 left-3 text-xs text-stone-400/60 pointer-events-none select-none tabular-nums">
         v{CLIENT_VERSION}
       </span>
