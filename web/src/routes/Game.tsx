@@ -8,9 +8,12 @@ import Clock from "@/components/Clock";
 import ParticipantsPanel from "@/components/ParticipantsPanel";
 import { useGameSocket } from "@/hooks/useGameSocket";
 import { useAuth } from "@/lib/auth";
-import { http } from "@/lib/fetcher";
+// `http` and `useVersion` are wired up for the commented-out DEV
+// clock-clip button further down — re-add the imports when you
+// uncomment it.
+// import { http } from "@/lib/fetcher";
 import { playMoveSound, speak } from "@/lib/sound";
-import { useVersion } from "@/lib/versionContext";
+// import { useVersion } from "@/lib/versionContext";
 import type {
   ColorStr,
   ForbiddenReason,
@@ -53,7 +56,7 @@ export default function Game() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const { user, applyStats } = useAuth();
-  const { devMode } = useVersion();
+  // const { devMode } = useVersion();  // re-enable with the DEV button below.
   const { state, connected, chat, sendChat, send, onMessage } = useGameSocket(gameId);
   const [gameOver, setGameOver] = useState<{
     winner: ColorStr | null;
@@ -326,6 +329,15 @@ export default function Game() {
               </span>
             )}
             <span>{connected ? "연결됨" : "연결 중..."} · {gameId}</span>
+            {/*
+              DEV-only clock-clip button. Commented out by request — it
+              was visible to every logged-in user whenever OMOK_DEV_MODE=1
+              was set on the server, and a co-player could use it to
+              skip the opponent's main time. Keep the JSX (and the server
+              endpoint) around so it's easy to re-enable for local
+              testing: set OMOK_DEV_MODE=1 in the env, uncomment this
+              block, and rebuild.
+
             {devMode && gameId && (
               <button
                 onClick={async () => {
@@ -342,6 +354,7 @@ export default function Game() {
                 DEV: 시계 10초
               </button>
             )}
+            */}
           </div>
         </div>
 
