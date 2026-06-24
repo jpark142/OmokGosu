@@ -167,62 +167,66 @@ export default function Game() {
   //     instead of being cancelled by the next number. After the grace,
   //     the countdown resumes at whatever the current clock actually
   //     reads — drift-free.
-  // Byo-yomi audio is split into two effects:
-  //   (a) state-driven: byo-yomi entry + period-transition announcements.
-  //       Fire once per state change.
-  //   (b) interval-driven (100ms): the actual "십, 구, 팔, ..." countdown.
-  //       Must run at the same cadence as the Clock UI (also 100ms) so
-  //       the spoken second lands at the exact instant the on-screen
-  //       number transitions, not 250ms later when the next server tick
-  //       lands. Uses Date.now() - state.server_time_ms to compute the
-  //       live byoyomi_ms instead of the stale snapshot value.
+  // Byo-yomi audio plays for whichever side's clock is currently ticking
+  // — both players' (and spectators') ears need to hear it, so we key off
+  // state.to_move rather than myTurn. Periods + first-entry announcements
+  // are tracked per color so both sides get their own "초읽기를 시작합니다"
+  // the first time they cross into byo-yomi.
+  //
+  // Split into two effects:
+  //   (a) state-driven: byo-yomi entry + period transition announcements.
+  //   (b) 100ms setInterval: the spoken countdown, locked to the same
+  //       cadence as the Clock UI so the number lands on the same instant
+  //       the rendered digit transitions.
   const lastSpokenSecond = useRef<number | null>(null);
-  const prevPeriods = useRef<number | null>(null);
-  const wasInByoyomi = useRef<boolean | null>(null);
+  const prevPeriodsByColor = useRef<{ BLACK: number | null; WHITE: number | null }>({
+    BLACK: null,
+    WHITE: null,
+  });
+  const announcedEntryByColor = useRef<{ BLACK: boolean; WHITE: boolean }>({
+    BLACK: false,
+    WHITE: false,
+  });
   const announcingUntilMs = useRef<number>(0);
+  const lastActiveColor = useRef<ColorStr | null>(null);
 
-  // Refs so the 100ms interval below always sees the latest values
-  // without remounting itself every tick.
   const stateRef = useRef(state);
   stateRef.current = state;
-  const myTurnRef = useRef(myTurn);
-  myTurnRef.current = myTurn;
   const toMoveRef = useRef(toMove);
   toMoveRef.current = toMove;
 
   // (a) state-driven announcements
   useEffect(() => {
-    if (!state || state.status === "OVER" || !myTurn) {
+    if (!state || state.status === "OVER") {
       lastSpokenSecond.current = null;
-      wasInByoyomi.current = null;
-      prevPeriods.current = null;
       return;
     }
-    const clock = toMove === "BLACK" ? state.clocks.black : state.clocks.white;
+    const active = toMove;
+    const clock = active === "BLACK" ? state.clocks.black : state.clocks.white;
     const nowMs = Date.now();
 
     if (!clock.in_byoyomi) {
-      prevPeriods.current = clock.byoyomi_periods;
-      lastSpokenSecond.current = null;
-      wasInByoyomi.current = false;
+      prevPeriodsByColor.current[active] = clock.byoyomi_periods;
       return;
     }
-    if (wasInByoyomi.current === false) {
+    // First time this side ever crossed into byo-yomi.
+    if (!announcedEntryByColor.current[active]) {
       speak("초읽기를 시작합니다");
       announcingUntilMs.current = nowMs + 1700;
+      announcedEntryByColor.current[active] = true;
       lastSpokenSecond.current = null;
     }
-    wasInByoyomi.current = true;
-
-    const periods = clock.byoyomi_periods;
-    if (prevPeriods.current !== null && periods < prevPeriods.current) {
-      if (periods === 1) speak("마지막입니다");
-      else if (periods > 0) speak(`${periods}번 남았습니다`);
+    // Period transition.
+    const prev = prevPeriodsByColor.current[active];
+    const cur = clock.byoyomi_periods;
+    if (prev !== null && cur < prev) {
+      if (cur === 1) speak("마지막입니다");
+      else if (cur > 0) speak(`${cur}번 남았습니다`);
       announcingUntilMs.current = Math.max(announcingUntilMs.current, nowMs + 1300);
       lastSpokenSecond.current = null;
     }
-    prevPeriods.current = periods;
-  }, [state, myTurn, toMove]);
+    prevPeriodsByColor.current[active] = cur;
+  }, [state, toMove]);
 
   // (b) 100ms countdown driver
   useEffect(() => {
@@ -232,15 +236,20 @@ export default function Game() {
     };
     const id = window.setInterval(() => {
       const s = stateRef.current;
-      if (!s || s.status === "OVER" || !myTurnRef.current) return;
-      const clock = toMoveRef.current === "BLACK" ? s.clocks.black : s.clocks.white;
+      if (!s || s.status === "OVER") return;
+      const active = toMoveRef.current;
+      const clock = active === "BLACK" ? s.clocks.black : s.clocks.white;
+      // When the active side flips (a move was made), reset the speech
+      // counter so the new side's countdown speaks fresh from whatever
+      // number their clock now reads, not stale from the previous side.
+      if (lastActiveColor.current !== active) {
+        lastActiveColor.current = active;
+        lastSpokenSecond.current = null;
+      }
       if (!clock.in_byoyomi) return;
       const nowMs = Date.now();
       if (nowMs < announcingUntilMs.current) return;
 
-      // Live byoyomi_ms = snapshot minus time elapsed since that snapshot
-      // arrived. Matches the Clock component's own deduction so the
-      // spoken second aligns with the on-screen transition.
       const localElapsed = Math.max(0, nowMs - s.server_time_ms);
       const liveByoyomiMs = Math.max(0, clock.byoyomi_ms - localElapsed);
       const secondsLeft = Math.ceil(liveByoyomiMs / 1000);

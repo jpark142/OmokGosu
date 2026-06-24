@@ -31,7 +31,10 @@ export default function Clock({ color, snap, active, serverTimeMs }: ClockProps)
   return (
     <div
       className={cn(
-        "flex flex-col items-center px-4 py-3 rounded-md border transition-colors",
+        // Fixed min-width so the box doesn't shrink when the byo-yomi
+        // number goes from two digits ("10") to one ("9, 8, ...") or
+        // when main is showing "5:00" vs "0:09" etc.
+        "flex flex-col items-center px-4 py-3 rounded-md border transition-colors min-w-[7rem]",
         active ? "bg-amber-50 border-amber-400 shadow-sm" : "bg-stone-100 border-stone-200",
       )}
     >
@@ -49,9 +52,11 @@ export default function Clock({ color, snap, active, serverTimeMs }: ClockProps)
         </div>
       ) : (
         <div className="flex items-center gap-2 mt-1">
+          {/* w-[2ch] reserves space for two digits so "9" doesn't shift
+              the period dots to the left when the number drops below 10. */}
           <div
             className={cn(
-              "font-mono text-3xl tabular-nums",
+              "font-mono text-3xl tabular-nums text-center w-[2ch]",
               byoyomiDisplay < 5000 && active ? "text-red-600" : "text-stone-900",
             )}
           >
