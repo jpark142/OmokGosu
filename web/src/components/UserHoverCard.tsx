@@ -3,10 +3,17 @@
 // network call until the first hover, and the result is cached per mount.
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
 import { getRecentMatches } from "@/lib/api";
 import type { GameOverReason, MatchSummary } from "@/types/protocol";
+
+// w-72 in tailwind = 288px. Used both for the className and the
+// right-edge clamp so the card stays inside the viewport on narrow
+// screens or when triggered near the right gutter.
+const CARD_WIDTH_PX = 288;
+const CARD_MARGIN_PX = 8;
 
 const OVER_REASON_LABEL: Record<GameOverReason, string> = {
   FIVE: "5목",
@@ -34,12 +41,14 @@ interface Props {
 
 export default function UserHoverCard({ userId, children }: Props) {
   const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [matches, setMatches] = useState<MatchSummary[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const fetchedRef = useRef(false);
   const enterTimer = useRef<number | null>(null);
   const leaveTimer = useRef<number | null>(null);
+  const triggerRef = useRef<HTMLSpanElement | null>(null);
 
   useEffect(() => {
     return () => {
@@ -47,6 +56,19 @@ export default function UserHoverCard({ userId, children }: Props) {
       if (leaveTimer.current !== null) window.clearTimeout(leaveTimer.current);
     };
   }, []);
+
+  // Position the card just below the trigger, clamped to the viewport so
+  // it doesn't overflow on the right edge. Computed at hover time —
+  // hover cards are short-lived enough that scroll-tracking would be
+  // more code than it's worth.
+  const updateCoords = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const maxLeft = window.innerWidth - CARD_WIDTH_PX - CARD_MARGIN_PX;
+    const left = Math.max(CARD_MARGIN_PX, Math.min(rect.left, maxLeft));
+    setCoords({ top: rect.bottom + 4, left });
+  };
 
   // If userId is null (e.g., AI slot), no hover behavior at all.
   if (userId === null) {
@@ -73,6 +95,7 @@ export default function UserHoverCard({ userId, children }: Props) {
       leaveTimer.current = null;
     }
     enterTimer.current = window.setTimeout(() => {
+      updateCoords();
       setOpen(true);
       void fetchOnce();
     }, 300);
@@ -86,11 +109,22 @@ export default function UserHoverCard({ userId, children }: Props) {
     leaveTimer.current = window.setTimeout(() => setOpen(false), 150);
   };
 
+  // Hovering onto the floating card itself must NOT close it — cancel any
+  // pending leave timer so the user can scrub through match rows / click
+  // the 프로필 link inside the card.
+  const onCardEnter = () => {
+    if (leaveTimer.current !== null) {
+      window.clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    }
+  };
+
   const now = Date.now() / 1000;
 
   return (
     <span
-      className="relative inline-block"
+      ref={triggerRef}
+      className="inline-block"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -100,8 +134,16 @@ export default function UserHoverCard({ userId, children }: Props) {
       >
         {children}
       </Link>
-      {open && (
-        <div className="absolute z-40 left-0 top-full mt-1 w-72 bg-white border border-stone-200 rounded-md shadow-lg p-3 text-left">
+      {open && createPortal(
+        <div
+          // Portal to <body> + fixed positioning so the card escapes any
+          // ancestor with overflow:hidden (e.g. the leaderboard table
+          // wrapper). z-50 keeps it above modals.
+          className="fixed z-50 w-72 bg-white border border-stone-200 rounded-md shadow-lg p-3 text-left"
+          style={{ top: coords.top, left: coords.left }}
+          onMouseEnter={onCardEnter}
+          onMouseLeave={onLeave}
+        >
           <div className="flex items-center justify-between mb-2">
             <div className="text-xs font-medium text-stone-500">최근 경기</div>
             <Link
@@ -170,7 +212,8 @@ export default function UserHoverCard({ userId, children }: Props) {
               ))}
             </ul>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </span>
   );
