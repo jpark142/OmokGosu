@@ -8,7 +8,9 @@ import Clock from "@/components/Clock";
 import ParticipantsPanel from "@/components/ParticipantsPanel";
 import { useGameSocket } from "@/hooks/useGameSocket";
 import { useAuth } from "@/lib/auth";
+import { http } from "@/lib/fetcher";
 import { playMoveSound, speak } from "@/lib/sound";
+import { useVersion } from "@/lib/versionContext";
 import type {
   ColorStr,
   ForbiddenReason,
@@ -51,6 +53,7 @@ export default function Game() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
   const { user, applyStats } = useAuth();
+  const { devMode } = useVersion();
   const { state, connected, chat, sendChat, send, onMessage } = useGameSocket(gameId);
   const [gameOver, setGameOver] = useState<{
     winner: ColorStr | null;
@@ -250,6 +253,22 @@ export default function Game() {
               </span>
             )}
             <span>{connected ? "연결됨" : "연결 중..."} · {gameId}</span>
+            {devMode && gameId && (
+              <button
+                onClick={async () => {
+                  try {
+                    await http.post(`/api/games/${gameId}/_dev/clip-clock`);
+                    toast.success("시계 10초로 단축");
+                  } catch {
+                    toast.error("DEV 치트 실패");
+                  }
+                }}
+                className="ml-2 px-2 py-0.5 rounded border border-purple-300 bg-purple-50 text-purple-700 font-medium hover:bg-purple-100"
+                title="양쪽 main 시간을 10초로 단축 (byo-yomi 흐름 테스트용)"
+              >
+                DEV: 시계 10초
+              </button>
+            )}
           </div>
         </div>
 

@@ -11,17 +11,22 @@ const POLL_INTERVAL_MS = 60_000;
 interface VersionInfo {
   version: string;
   min_client_version: string;
+  dev_mode?: boolean;
 }
 
 export interface UseVersionCheck {
   status: VersionStatus;
   serverVersion: string | null;
   clientVersion: string;
+  // True when the server reports OMOK_DEV_MODE=1 — used to conditionally
+  // render owner-only debug affordances (e.g. the in-game clip-clock cheat).
+  devMode: boolean;
 }
 
 export function useVersionCheck(): UseVersionCheck {
   const [status, setStatus] = useState<VersionStatus>("ok");
   const [serverVersion, setServerVersion] = useState<string | null>(null);
+  const [devMode, setDevMode] = useState<boolean>(false);
   const mountedRef = useRef(true);
 
   const tick = useCallback(async () => {
@@ -39,6 +44,7 @@ export function useVersionCheck(): UseVersionCheck {
       const info = (await res.json()) as VersionInfo;
       if (!mountedRef.current) return;
       setServerVersion(info.version);
+      setDevMode(!!info.dev_mode);
       setStatus(classify(info.version, info.min_client_version, CLIENT_VERSION));
     } catch {
       /* network blip — leave previous status. Next tick will retry. */
@@ -68,5 +74,5 @@ export function useVersionCheck(): UseVersionCheck {
     };
   }, [tick]);
 
-  return { status, serverVersion, clientVersion: CLIENT_VERSION };
+  return { status, serverVersion, clientVersion: CLIENT_VERSION, devMode };
 }

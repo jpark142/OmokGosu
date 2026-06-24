@@ -103,12 +103,12 @@ export function hookAutoUnlock(): () => void {
 // ----- effects -----
 
 /**
- * Synthesize a short percussive "tok" approximating a wooden stone hitting
- * a board. We feed a short burst of low-pass filtered noise through a sharp
- * envelope; that's much closer to a physical click than the triangle-wave
- * tones the first version used (which read as "SF beep" per user
- * feedback). Some pitch jitter keeps successive moves from sounding
- * identical.
+ * Synthesize a short, crisp "딱" approximating a wooden stone striking a
+ * board. Earlier revisions sounded either SF-beepy (pure tones) or too
+ * dull (low-cutoff noise burst). This version uses a very short
+ * band-passed noise transient centered in the 2-3kHz range with a near-
+ * instantaneous attack — that's where the energy of a real wood-on-wood
+ * tap lives. Pitch jitter keeps successive moves from sounding identical.
  */
 export function playMoveSound(): void {
   if (!_enabled) return;
@@ -116,9 +116,9 @@ export function playMoveSound(): void {
   if (!ctx || ctx.state !== "running") return;
 
   const now = ctx.currentTime;
-  const dur = 0.08;  // ~80ms total tail
+  const dur = 0.035;  // ~35ms — short and snappy
 
-  // Noise source — a short buffer of white noise played once.
+  // Noise source — a tiny buffer of white noise played once.
   const noiseLen = Math.ceil(ctx.sampleRate * dur);
   const buf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
   const data = buf.getChannelData(0);
@@ -126,35 +126,24 @@ export function playMoveSound(): void {
   const noise = ctx.createBufferSource();
   noise.buffer = buf;
 
-  // Low-pass filter so the noise sounds woody, not hissy. Jittered slightly.
-  const cutoff = 750 + (Math.random() * 200 - 100);
-  const lp = ctx.createBiquadFilter();
-  lp.type = "lowpass";
-  lp.frequency.value = cutoff;
-  lp.Q.value = 1.4;
+  // Band-pass centered around 2.2kHz — woody-crisp territory. The Q gives
+  // it a slight resonant ring so the click has identity instead of just
+  // being a hiss.
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = 2200 + (Math.random() * 400 - 200);
+  bp.Q.value = 3;
 
-  // Sharp attack + exponential decay = percussive envelope.
+  // Sub-ms attack + fast exponential decay. No layered body tone this
+  // time — adding a low sine just thickens the result into "tok" again.
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(0.55, now + 0.003);
+  env.gain.linearRampToValueAtTime(0.7, now + 0.001);
   env.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
-  noise.connect(lp).connect(env).connect(ctx.destination);
+  noise.connect(bp).connect(env).connect(ctx.destination);
   noise.start(now);
-  noise.stop(now + dur + 0.02);
-
-  // Tiny resonant body tone underneath — barely audible, just lends weight
-  // so the click doesn't sound paper-thin on small speakers.
-  const body = ctx.createOscillator();
-  body.type = "sine";
-  body.frequency.value = 180 + (Math.random() * 30 - 15);
-  const bodyEnv = ctx.createGain();
-  bodyEnv.gain.setValueAtTime(0, now);
-  bodyEnv.gain.linearRampToValueAtTime(0.18, now + 0.002);
-  bodyEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-  body.connect(bodyEnv).connect(ctx.destination);
-  body.start(now);
-  body.stop(now + 0.06);
+  noise.stop(now + dur + 0.01);
 }
 
 // ----- voice selection -----
@@ -216,9 +205,11 @@ export function speak(text: string, opts: { rate?: number; pitch?: number } = {}
   u.pitch = opts.pitch ?? 1.0;
   const v = pickKoreanFemaleVoice();
   if (v) u.voice = v;
-  // Cancel anything queued — countdowns benefit from the latest take
-  // arriving promptly, and we don't want a backlog if the page was
-  // backgrounded for a moment.
-  window.speechSynthesis.cancel();
+  // Don't cancel() — that was clipping the previous utterance mid-word in
+  // user testing ("십" only played for a fraction of a second). Countdown
+  // utterances are short (≤300ms) and emitted ~1s apart, so the queue
+  // can't actually back up. If it ever does, the next number is more
+  // useful than a stale one — but in practice the spoken number always
+  // finishes before the next one is queued.
   window.speechSynthesis.speak(u);
 }

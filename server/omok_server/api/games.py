@@ -6,6 +6,7 @@ behind the room flow); HVA records the caller's stats on game end.
 """
 from __future__ import annotations
 
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +21,10 @@ from omok_server.schemas import (
     CreateGameResponse,
     SStateMsg,
 )
+
+
+def _is_dev_mode() -> bool:
+    return os.environ.get("OMOK_DEV_MODE", "").strip() == "1"
 
 router = APIRouter(prefix="/api")
 
@@ -93,6 +98,31 @@ async def resign(
         raise HTTPException(status_code=404, detail="game not found")
     async with s.lock:
         s.resign(color)
+    return {"ok": True}
+
+
+@router.post("/games/{game_id}/_dev/clip-clock")
+async def dev_clip_clock(
+    game_id: str,
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict[str, bool]:
+    """Dev-only: collapse both sides' main time down to 10 seconds so the
+    byo-yomi flow can be exercised in seconds instead of 5 real minutes.
+    Gated by the `OMOK_DEV_MODE` env var; returns 403 otherwise."""
+    if not _is_dev_mode():
+        raise HTTPException(status_code=403, detail="dev mode disabled")
+    s = manager.get(game_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="game not found")
+    async with s.lock:
+        # Don't touch in_byoyomi / byoyomi_periods — those should still
+        # transition naturally via _advance_state once the 10s runs out.
+        s.clock.black.main_ms = min(s.clock.black.main_ms, 10_000)
+        s.clock.white.main_ms = min(s.clock.white.main_ms, 10_000)
+        # Rebase the active side's turn start so the remaining 10s is
+        # counted from "now," not from whenever the turn really began.
+        if s.clock.active is not None and s.clock.turn_started_at_ms is not None:
+            s.clock.turn_started_at_ms = s.clock.now()
     return {"ok": True}
 
 

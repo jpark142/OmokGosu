@@ -7,7 +7,7 @@ decide whether a soft banner or hard modal should be shown.
 hits — it must stay dependency-free (no DB, no auth) so a failing dependency
 doesn't take the whole pod down via the health check.
 """
-from __future__ import annotations
+import os
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -17,9 +17,20 @@ from omok_server.version import MIN_CLIENT_VERSION, SERVER_VERSION
 router = APIRouter(prefix="/api", tags=["system"])
 
 
+def _is_dev_mode() -> bool:
+    """Gates a few owner-only debug affordances (e.g. the in-game
+    "clip clock to 10s" cheat). Set OMOK_DEV_MODE=1 in the env to enable;
+    unset on prod once you're done verifying."""
+    return os.environ.get("OMOK_DEV_MODE", "").strip() == "1"
+
+
 class VersionInfo(BaseModel):
     version: str
     min_client_version: str
+    # Reflected to the client so it can conditionally render dev-only
+    # affordances (the Game.tsx "DEV: 시계 단축" button). Not auth — the
+    # gate that matters lives on the cheat endpoint itself.
+    dev_mode: bool
 
 
 class HealthInfo(BaseModel):
@@ -30,7 +41,11 @@ class HealthInfo(BaseModel):
 @router.get("/version", response_model=VersionInfo)
 def version() -> VersionInfo:
     """No auth — clients poll this before any other request."""
-    return VersionInfo(version=SERVER_VERSION, min_client_version=MIN_CLIENT_VERSION)
+    return VersionInfo(
+        version=SERVER_VERSION,
+        min_client_version=MIN_CLIENT_VERSION,
+        dev_mode=_is_dev_mode(),
+    )
 
 
 @router.get("/health", response_model=HealthInfo)
