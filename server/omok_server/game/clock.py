@@ -91,6 +91,65 @@ class GameClock:
         else:
             s.byoyomi_periods -= consumed
 
+    def _advance_state(self) -> None:
+        """Sync the active side's state to wall-clock time WITHOUT ending
+        the turn. Idempotent — safe to call before any read.
+
+        Two transitions can fire without a move:
+
+          1. main_ms → 0 the instant elapsed reaches the original main
+             budget. We rebase turn_started_at so subsequent elapsed
+             calculations measure from "byo-yomi start," and flip
+             in_byoyomi = True. The user sees the byo-yomi clock the
+             moment their main runs out, not on their next move.
+
+          2. byo-yomi period boundary. The active side that lets a full
+             10s period elapse without playing has spent it; we
+             decrement byoyomi_periods and rebase turn_started_at to
+             the start of the next period. (This is the standard
+             Japanese byo-yomi rule: free refresh within the period,
+             one period consumed each time you cross a boundary.)
+
+        Callers must hold no logical invariants other than "the active
+        side is still up to move" — this function never marks a side as
+        timed out or ends the turn. Timeout detection stays in
+        check_timeout, and turn-end stays in apply_move.
+        """
+        if self.active is None or self.turn_started_at_ms is None:
+            return
+        s = self.side(self.active)
+        P = s.byoyomi_ms
+        if P <= 0:
+            return
+
+        # 1. Cross from main into byo-yomi if elapsed has overrun main_ms.
+        if not s.in_byoyomi:
+            elapsed = self._elapsed_ms()
+            if elapsed < s.main_ms:
+                return  # still inside main time
+            overflow = elapsed - s.main_ms
+            # Rebase: pretend the turn began at the moment main ran out.
+            # `now() - overflow` is that wall-clock instant.
+            self.turn_started_at_ms = self.now() - overflow
+            s.main_ms = 0
+            s.in_byoyomi = True
+            # Fall through; if overflow > P we also need to consume periods.
+
+        # 2. Consume any whole byo-yomi periods this turn has used up.
+        elapsed_in_byo = self._elapsed_ms()
+        if elapsed_in_byo <= P:
+            return
+        k = elapsed_in_byo // P
+        # Clamp: never reduce below 1 here, because reaching 0 means the
+        # final period has fully elapsed → that's timeout territory, owned
+        # by check_timeout. We leave byoyomi_periods at 1 with elapsed
+        # still pointing past P, and check_timeout will flag it.
+        consumable = min(k, max(0, s.byoyomi_periods - 1))
+        if consumable == 0:
+            return
+        s.byoyomi_periods -= consumable
+        self.turn_started_at_ms += consumable * P
+
     def apply_move(self) -> None:
         """Consume time used during the active side's turn and stop the clock.
 
@@ -99,41 +158,59 @@ class GameClock:
         """
         if self.active is None or self.turn_started_at_ms is None:
             return
+        # Bring state up to date so apply_move only has to handle the
+        # "within current period" or "still inside main" cases.
+        self._advance_state()
         s = self.side(self.active)
         elapsed = self._elapsed_ms()
 
         if not s.in_byoyomi:
-            if elapsed <= s.main_ms:
-                s.main_ms -= elapsed
-            else:
-                overflow = elapsed - s.main_ms
-                s.main_ms = 0
-                s.in_byoyomi = True
-                self._consume_byoyomi(s, overflow)
+            # Still inside main time. Deduct what was used.
+            s.main_ms = max(0, s.main_ms - elapsed)
         else:
-            # Already in byo-yomi. If we moved within the period, refresh (Japanese style).
-            self._consume_byoyomi(s, elapsed)
+            # In byo-yomi: free refresh if we moved within the current
+            # period (elapsed_in_byo ≤ P). _advance_state has already
+            # consumed any crossed periods.
+            if elapsed > s.byoyomi_ms:
+                # Should not happen — _advance_state would have caught it
+                # by either consuming a period or leaving timeout to
+                # check_timeout. But guard anyway.
+                self._consume_byoyomi(s, elapsed)
 
         self.active = None
         self.turn_started_at_ms = None
 
     def check_timeout(self) -> ColorStr | None:
-        """Return the color that has timed out, if any (active side only)."""
+        """Return the color that has timed out, if any (active side only).
+
+        Always advances state first so the boundary check sees an accurate
+        in_byoyomi / byoyomi_periods picture.
+        """
         if self.active is None:
             return None
+        self._advance_state()
         s = self.side(self.active)
         elapsed = self._elapsed_ms()
         if not s.in_byoyomi:
-            # Main time + all periods of byo-yomi.
-            total_budget = s.main_ms + s.byoyomi_periods * s.byoyomi_ms
-            if elapsed > total_budget:
-                s.timed_out = True
-                return self.active
-        else:
-            total_budget = s.byoyomi_periods * s.byoyomi_ms
-            if elapsed > total_budget:
-                s.timed_out = True
-                return self.active
+            # Still in main time — _advance_state would have flipped us if
+            # we'd overrun. So this branch only fires while main is alive.
+            return None
+        # In byo-yomi. _advance_state has already consumed all crossable
+        # periods; the only way to time out is to overrun the LAST period.
+        if s.byoyomi_periods <= 0:
+            s.timed_out = True
+            return self.active
+        if s.byoyomi_periods == 1 and self._elapsed_ms() > s.byoyomi_ms:
+            s.byoyomi_periods = 0
+            s.timed_out = True
+            return self.active
+        # Fall-through: also handle the degenerate case of periods > 1 +
+        # elapsed past the period — _advance_state would have consumed,
+        # but defensively check.
+        if elapsed > s.byoyomi_periods * s.byoyomi_ms:
+            s.byoyomi_periods = 0
+            s.timed_out = True
+            return self.active
         return None
 
     def live_snapshot_for(self, color: ColorStr) -> ClockSnapshot:
@@ -141,7 +218,13 @@ class GameClock:
 
         For the active side, deducts the in-progress elapsed ms from the appropriate bucket.
         For the inactive side, returns the static snapshot.
+
+        Advances state first so the snapshot always reflects the latest
+        in_byoyomi / byoyomi_periods (otherwise a viewer would see a frozen
+        "5:00 main" right after main ran out, until the next move landed).
         """
+        if color == self.active:
+            self._advance_state()
         s = self.side(color)
         if color != self.active:
             return s.snapshot()

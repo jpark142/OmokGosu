@@ -131,3 +131,58 @@ def test_live_snapshot_for_active_side_deducts_elapsed() -> None:
     # Inactive side untouched.
     snap_w = clock.live_snapshot_for(ColorStr.WHITE)
     assert snap_w.main_ms == 5 * 60 * 1000
+
+
+# ----- Bug-fix coverage for v1.4.1 (state advances mid-turn) -----
+
+def test_main_to_byoyomi_transition_visible_without_move() -> None:
+    """The instant elapsed crosses main_ms, the snapshot must show
+    in_byoyomi=True. Previously this only happened when the active side
+    actually played a move, leaving the UI stuck on '0:00 main'."""
+    ft = FakeTime()
+    clock = GameClock(now=ft)
+    clock.start_turn(ColorStr.BLACK)
+    ft.advance(5 * 60 * 1000 + 1)  # 0.001s past main
+    snap = clock.live_snapshot_for(ColorStr.BLACK)
+    assert snap.in_byoyomi is True
+    assert snap.main_ms == 0
+    # Still inside the first byo-yomi period.
+    assert snap.byoyomi_periods == 3
+
+
+def test_one_period_elapsed_without_move_does_not_timeout() -> None:
+    """Letting one full 10s byo-yomi period elapse should consume one
+    period but NOT end the game (3 → 2 periods remaining)."""
+    ft = FakeTime()
+    clock = GameClock(now=ft)
+    clock.start_turn(ColorStr.BLACK)
+    # Cross main + one full byo-yomi period (10s) without playing.
+    ft.advance(5 * 60 * 1000 + 10_000 + 1)
+    assert clock.check_timeout() is None
+    assert clock.black.in_byoyomi is True
+    assert clock.black.byoyomi_periods == 2
+
+
+def test_two_periods_elapsed_consumes_two_periods_no_timeout() -> None:
+    ft = FakeTime()
+    clock = GameClock(now=ft)
+    clock.start_turn(ColorStr.BLACK)
+    ft.advance(5 * 60 * 1000 + 20_000 + 1)
+    assert clock.check_timeout() is None
+    assert clock.black.byoyomi_periods == 1
+
+
+def test_all_three_periods_required_for_timeout() -> None:
+    """Crossing the third period boundary AND running into a fourth is
+    what should fire timeout. Previously the engine collapsed this into
+    a single budget and could time out partway through."""
+    ft = FakeTime()
+    clock = GameClock(now=ft)
+    clock.start_turn(ColorStr.BLACK)
+    # main + 30s byo-yomi total = 5m30s. Stop right at the edge.
+    ft.advance(5 * 60 * 1000 + 30_000)
+    assert clock.check_timeout() is None  # exactly at the boundary
+    # 0.001s past → timeout.
+    ft.advance(1)
+    assert clock.check_timeout() == ColorStr.BLACK
+    assert clock.black.timed_out is True

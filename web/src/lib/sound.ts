@@ -103,9 +103,12 @@ export function hookAutoUnlock(): () => void {
 // ----- effects -----
 
 /**
- * Short percussive "click" approximating the sound of a stone landing on
- * a wooden board. Synthesized so we don't ship a sample file. Pitch is
- * randomized slightly per call so successive moves don't sound identical.
+ * Synthesize a short percussive "tok" approximating a wooden stone hitting
+ * a board. We feed a short burst of low-pass filtered noise through a sharp
+ * envelope; that's much closer to a physical click than the triangle-wave
+ * tones the first version used (which read as "SF beep" per user
+ * feedback). Some pitch jitter keeps successive moves from sounding
+ * identical.
  */
 export function playMoveSound(): void {
   if (!_enabled) return;
@@ -113,26 +116,90 @@ export function playMoveSound(): void {
   if (!ctx || ctx.state !== "running") return;
 
   const now = ctx.currentTime;
-  // Two layered tones make it sound less "beep" and more "thock".
-  // Frequencies tuned by ear; jitter keeps it from being robotic.
-  const baseHz = 380 + (Math.random() * 40 - 20);
-  const overHz = baseHz * 2.7;
+  const dur = 0.08;  // ~80ms total tail
 
-  for (const [freq, gain, dur] of [
-    [baseHz, 0.25, 0.09],
-    [overHz, 0.08, 0.06],
-  ] as const) {
-    const osc = ctx.createOscillator();
-    const env = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.value = freq;
-    env.gain.setValueAtTime(0, now);
-    env.gain.linearRampToValueAtTime(gain, now + 0.005);
-    env.gain.exponentialRampToValueAtTime(0.001, now + dur);
-    osc.connect(env).connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + dur + 0.02);
+  // Noise source — a short buffer of white noise played once.
+  const noiseLen = Math.ceil(ctx.sampleRate * dur);
+  const buf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < noiseLen; i++) data[i] = Math.random() * 2 - 1;
+  const noise = ctx.createBufferSource();
+  noise.buffer = buf;
+
+  // Low-pass filter so the noise sounds woody, not hissy. Jittered slightly.
+  const cutoff = 750 + (Math.random() * 200 - 100);
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = cutoff;
+  lp.Q.value = 1.4;
+
+  // Sharp attack + exponential decay = percussive envelope.
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(0.55, now + 0.003);
+  env.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+  noise.connect(lp).connect(env).connect(ctx.destination);
+  noise.start(now);
+  noise.stop(now + dur + 0.02);
+
+  // Tiny resonant body tone underneath — barely audible, just lends weight
+  // so the click doesn't sound paper-thin on small speakers.
+  const body = ctx.createOscillator();
+  body.type = "sine";
+  body.frequency.value = 180 + (Math.random() * 30 - 15);
+  const bodyEnv = ctx.createGain();
+  bodyEnv.gain.setValueAtTime(0, now);
+  bodyEnv.gain.linearRampToValueAtTime(0.18, now + 0.002);
+  bodyEnv.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+  body.connect(bodyEnv).connect(ctx.destination);
+  body.start(now);
+  body.stop(now + 0.06);
+}
+
+// ----- voice selection -----
+
+let _cachedVoice: SpeechSynthesisVoice | null | undefined = undefined;
+
+function pickKoreanFemaleVoice(): SpeechSynthesisVoice | null {
+  if (_cachedVoice !== undefined) return _cachedVoice;
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    _cachedVoice = null;
+    return null;
   }
+  const all = window.speechSynthesis.getVoices();
+  if (all.length === 0) {
+    // Voices load asynchronously on some browsers. Leave the cache slot
+    // unset so a later call retries.
+    return null;
+  }
+  const ko = all.filter((v) => v.lang === "ko-KR" || v.lang.startsWith("ko"));
+  // Known female voice names across Chrome/Edge/Safari. Anything with these
+  // tokens is preferred; the literal token "female" is a Google fallback.
+  const FEMALE_TOKENS = [
+    "female",
+    "여성",
+    "yuna",       // macOS Korean
+    "heami",      // Windows 헤미
+    "혜미",
+    "유나",
+    "sora",       // Samsung
+    "google",     // Chrome's Google 한국의 default is female
+    "kyuri",
+  ];
+  const lc = (s: string) => s.toLowerCase();
+  const female = ko.find((v) => FEMALE_TOKENS.some((t) => lc(v.name).includes(t)));
+  const fallback = female ?? ko[0] ?? null;
+  _cachedVoice = fallback;
+  return fallback;
+}
+
+// Some browsers populate voices asynchronously — refresh the cache when
+// the voiceschanged event fires.
+if (typeof window !== "undefined" && "speechSynthesis" in window) {
+  window.speechSynthesis.addEventListener("voiceschanged", () => {
+    _cachedVoice = undefined;
+  });
 }
 
 /**
@@ -147,6 +214,8 @@ export function speak(text: string, opts: { rate?: number; pitch?: number } = {}
   u.lang = "ko-KR";
   u.rate = opts.rate ?? 1.25;
   u.pitch = opts.pitch ?? 1.0;
+  const v = pickKoreanFemaleVoice();
+  if (v) u.voice = v;
   // Cancel anything queued — countdowns benefit from the latest take
   // arriving promptly, and we don't want a backlog if the page was
   // backgrounded for a moment.
