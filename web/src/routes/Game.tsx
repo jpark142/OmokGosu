@@ -167,13 +167,35 @@ export default function Game() {
   //     instead of being cancelled by the next number. After the grace,
   //     the countdown resumes at whatever the current clock actually
   //     reads — drift-free.
+  // Byo-yomi audio is split into two effects:
+  //   (a) state-driven: byo-yomi entry + period-transition announcements.
+  //       Fire once per state change.
+  //   (b) interval-driven (100ms): the actual "십, 구, 팔, ..." countdown.
+  //       Must run at the same cadence as the Clock UI (also 100ms) so
+  //       the spoken second lands at the exact instant the on-screen
+  //       number transitions, not 250ms later when the next server tick
+  //       lands. Uses Date.now() - state.server_time_ms to compute the
+  //       live byoyomi_ms instead of the stale snapshot value.
   const lastSpokenSecond = useRef<number | null>(null);
   const prevPeriods = useRef<number | null>(null);
   const wasInByoyomi = useRef<boolean | null>(null);
   const announcingUntilMs = useRef<number>(0);
+
+  // Refs so the 100ms interval below always sees the latest values
+  // without remounting itself every tick.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const myTurnRef = useRef(myTurn);
+  myTurnRef.current = myTurn;
+  const toMoveRef = useRef(toMove);
+  toMoveRef.current = toMove;
+
+  // (a) state-driven announcements
   useEffect(() => {
     if (!state || state.status === "OVER" || !myTurn) {
       lastSpokenSecond.current = null;
+      wasInByoyomi.current = null;
+      prevPeriods.current = null;
       return;
     }
     const clock = toMove === "BLACK" ? state.clocks.black : state.clocks.white;
@@ -185,51 +207,55 @@ export default function Game() {
       wasInByoyomi.current = false;
       return;
     }
-
-    // Transition: just entered byo-yomi this tick. Announce it once.
     if (wasInByoyomi.current === false) {
       speak("초읽기를 시작합니다");
-      announcingUntilMs.current = nowMs + 1700;  // ~1.5s phrase + buffer
+      announcingUntilMs.current = nowMs + 1700;
       lastSpokenSecond.current = null;
     }
     wasInByoyomi.current = true;
 
     const periods = clock.byoyomi_periods;
-
-    // Period transition announcement (only if we were already in byo-yomi).
     if (prevPeriods.current !== null && periods < prevPeriods.current) {
       if (periods === 1) speak("마지막입니다");
       else if (periods > 0) speak(`${periods}번 남았습니다`);
-      // Hold the countdown for ~1.3s so the announcement doesn't get
-      // cancelled mid-word by the next number speak(). The countdown
-      // resumes from whatever second the clock shows after the grace.
       announcingUntilMs.current = Math.max(announcingUntilMs.current, nowMs + 1300);
       lastSpokenSecond.current = null;
     }
     prevPeriods.current = periods;
-
-    // Skip the countdown while the announcement is still playing.
-    if (nowMs < announcingUntilMs.current) return;
-
-    const secondsLeft = Math.ceil(clock.byoyomi_ms / 1000);
-    // Countdown only for the last 10 seconds of the current period. With
-    // a 20s period this means the first 10s of each period stays silent
-    // and the announcer takes over at the 10-second mark.
-    if (
-      secondsLeft > 0 &&
-      secondsLeft <= 10 &&
-      secondsLeft !== lastSpokenSecond.current
-    ) {
-      lastSpokenSecond.current = secondsLeft;
-      // Map to Korean words so the TTS pronounces the count crisply —
-      // raw digits sometimes get read in English by Windows voices.
-      const KO_NUMBER: Record<number, string> = {
-        1: "일", 2: "이", 3: "삼", 4: "사", 5: "오",
-        6: "육", 7: "칠", 8: "팔", 9: "구", 10: "십",
-      };
-      speak(KO_NUMBER[secondsLeft] ?? String(secondsLeft));
-    }
   }, [state, myTurn, toMove]);
+
+  // (b) 100ms countdown driver
+  useEffect(() => {
+    const KO_NUMBER: Record<number, string> = {
+      1: "일", 2: "이", 3: "삼", 4: "사", 5: "오",
+      6: "육", 7: "칠", 8: "팔", 9: "구", 10: "십",
+    };
+    const id = window.setInterval(() => {
+      const s = stateRef.current;
+      if (!s || s.status === "OVER" || !myTurnRef.current) return;
+      const clock = toMoveRef.current === "BLACK" ? s.clocks.black : s.clocks.white;
+      if (!clock.in_byoyomi) return;
+      const nowMs = Date.now();
+      if (nowMs < announcingUntilMs.current) return;
+
+      // Live byoyomi_ms = snapshot minus time elapsed since that snapshot
+      // arrived. Matches the Clock component's own deduction so the
+      // spoken second aligns with the on-screen transition.
+      const localElapsed = Math.max(0, nowMs - s.server_time_ms);
+      const liveByoyomiMs = Math.max(0, clock.byoyomi_ms - localElapsed);
+      const secondsLeft = Math.ceil(liveByoyomiMs / 1000);
+
+      if (
+        secondsLeft > 0 &&
+        secondsLeft <= 10 &&
+        secondsLeft !== lastSpokenSecond.current
+      ) {
+        lastSpokenSecond.current = secondsLeft;
+        speak(KO_NUMBER[secondsLeft] ?? String(secondsLeft));
+      }
+    }, 100);
+    return () => window.clearInterval(id);
+  }, []);
 
   const onPlay = (r: number, c: number) => {
     if (!state || state.status === "OVER") return;
