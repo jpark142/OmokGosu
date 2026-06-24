@@ -201,15 +201,18 @@ export function speak(text: string, opts: { rate?: number; pitch?: number } = {}
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "ko-KR";
-  u.rate = opts.rate ?? 1.25;
+  u.rate = opts.rate ?? 1.0;
   u.pitch = opts.pitch ?? 1.0;
   const v = pickKoreanFemaleVoice();
   if (v) u.voice = v;
-  // Don't cancel() — that was clipping the previous utterance mid-word in
-  // user testing ("십" only played for a fraction of a second). Countdown
-  // utterances are short (≤300ms) and emitted ~1s apart, so the queue
-  // can't actually back up. If it ever does, the next number is more
-  // useful than a stale one — but in practice the spoken number always
-  // finishes before the next one is queued.
+  // Cancel any pending utterance so what plays is always the freshest
+  // game state. The previous "no-cancel" experiment was meant to stop
+  // the v1.4.x bug where '십' clipped mid-word — but that bug actually
+  // came from useGameSocket dropping timer_tick (fixed in v1.5.1), not
+  // from cancel. With the tick now applied every 250ms, the speak()
+  // path is the right place to enforce "spoken number must match the
+  // clock"; without cancel, the queue would back up behind a 1s
+  // announcement and the countdown would drift behind real time.
+  window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
 }

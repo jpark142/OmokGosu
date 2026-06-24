@@ -156,8 +156,20 @@ export default function Game() {
   // Byo-yomi countdown + period transitions for the active side. Speak only
   // when it's the local player's turn so opponents' clock isn't narrated
   // into the player's ears (distracting + redundant).
+  //
+  // Two pieces of timing care:
+  //   - Each speak() cancels what's pending so the spoken second always
+  //     matches the on-screen clock (no queue drift behind a 1s
+  //     announcement).
+  //   - Period-transition announcements ("마지막입니다", "N번 남았습니다")
+  //     are protected by a ~1.3s grace window: during that window the
+  //     countdown speak() is skipped so the announcement plays through
+  //     instead of being cancelled by the next number. After the grace,
+  //     the countdown resumes at whatever the current clock actually
+  //     reads — drift-free.
   const lastSpokenSecond = useRef<number | null>(null);
   const prevPeriods = useRef<number | null>(null);
+  const announcingUntilMs = useRef<number>(0);
   useEffect(() => {
     if (!state || state.status === "OVER" || !myTurn) {
       lastSpokenSecond.current = null;
@@ -165,23 +177,29 @@ export default function Game() {
     }
     const clock = toMove === "BLACK" ? state.clocks.black : state.clocks.white;
     if (!clock.in_byoyomi) {
-      // Track periods even outside byo-yomi so the first period entry is
-      // detected correctly when main time runs out.
       prevPeriods.current = clock.byoyomi_periods;
       lastSpokenSecond.current = null;
       return;
     }
-    // Period dropped since last tick (used up one byo-yomi period).
+
+    const nowMs = Date.now();
     const periods = clock.byoyomi_periods;
+
+    // Period transition announcement.
     if (prevPeriods.current !== null && periods < prevPeriods.current) {
       if (periods === 1) speak("마지막입니다");
       else if (periods > 0) speak(`${periods}번 남았습니다`);
+      // Hold the countdown for ~1.3s so the announcement doesn't get
+      // cancelled mid-word by the next number speak(). The countdown
+      // resumes from whatever second the clock shows after the grace.
+      announcingUntilMs.current = nowMs + 1300;
+      lastSpokenSecond.current = null;
     }
     prevPeriods.current = periods;
 
-    // Count down each whole second once. ceil rather than floor so the
-    // first "10" fires the instant the period flips into byo-yomi, not a
-    // beat later when only ~9.999s remain.
+    // Skip the countdown while the announcement is still playing.
+    if (nowMs < announcingUntilMs.current) return;
+
     const secondsLeft = Math.ceil(clock.byoyomi_ms / 1000);
     if (
       secondsLeft > 0 &&
@@ -189,7 +207,13 @@ export default function Game() {
       secondsLeft !== lastSpokenSecond.current
     ) {
       lastSpokenSecond.current = secondsLeft;
-      speak(String(secondsLeft), { rate: 1.4 });
+      // Map to Korean words so the TTS pronounces the count crisply —
+      // raw digits sometimes get read in English by Windows voices.
+      const KO_NUMBER: Record<number, string> = {
+        1: "일", 2: "이", 3: "삼", 4: "사", 5: "오",
+        6: "육", 7: "칠", 8: "팔", 9: "구", 10: "십",
+      };
+      speak(KO_NUMBER[secondsLeft] ?? String(secondsLeft));
     }
   }, [state, myTurn, toMove]);
 
