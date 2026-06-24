@@ -45,7 +45,24 @@ export function useGameSocket(gameId: string | undefined): GameSocketState {
         try {
           const msg = JSON.parse(ev.data) as ServerMsg;
           if (msg.type === "state") setState(msg);
-          else if (msg.type === "chat_history") setChat(msg.messages);
+          else if (msg.type === "timer_tick") {
+            // Merge the live clocks / to_move / server_time_ms into the
+            // existing state snapshot. Without this, state.clocks only
+            // updated on full SStateMsg payloads (i.e. once per move),
+            // so byo-yomi entry, the DEV clock-clip cheat, and the
+            // countdown TTS effect (which depends on state) all sat
+            // frozen until the next move landed.
+            setState((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    clocks: msg.clocks,
+                    to_move: msg.to_move,
+                    server_time_ms: msg.server_time_ms,
+                  }
+                : prev,
+            );
+          } else if (msg.type === "chat_history") setChat(msg.messages);
           else if (msg.type === "chat") {
             const { user_id, username, text, server_time_ms, is_system, role } = msg;
             setChat((prev) => [
