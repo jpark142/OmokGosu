@@ -48,16 +48,12 @@ export default function BugReportDialog({ open, onClose }: Props) {
         user_agent: navigator.userAgent,
         anonymous,
       });
-      if (res.mirrored === "github" && res.github_issue_url) {
+      if (res.mirrored === "github") {
+        // No link to the issue: the GitHub repo is the maintainer's personal
+        // account, and we don't want reporters clicking through to it.
         toast.success(
           `감사합니다. GitHub Issue #${res.github_issue_number}에 등록되었습니다.`,
-          {
-            action: {
-              label: "보기",
-              onClick: () => window.open(res.github_issue_url!, "_blank"),
-            },
-            duration: 8000,
-          },
+          { duration: 8000 },
         );
       } else if (res.mirrored === "github_failed") {
         // Saved locally, but the GitHub mirror was supposed to run and didn't.
