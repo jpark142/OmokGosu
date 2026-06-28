@@ -65,3 +65,18 @@ class Match(SQLModel, table=True):
     # moves without reconstructing them. Empty string for matches predating
     # this field.
     moves_json: str = Field(default="[]")
+
+
+class SessionLog(SQLModel, table=True):
+    """One online session per row: from a user's first live socket to their
+    last. Multiple tabs collapse into a single session because the WsRegistry
+    only signals offline↔online transitions, not every socket.
+
+    Powers later usage analytics (DAU/WAU, session length, concurrent peak) —
+    none of which can be reconstructed after the fact, so we capture them as
+    they happen. `disconnected_at` is NULL while a session is open; sessions
+    orphaned by a server restart are closed on the next startup."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    connected_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    disconnected_at: Optional[datetime] = Field(default=None)

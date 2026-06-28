@@ -23,6 +23,12 @@ from fastapi import WebSocket
 
 
 PresenceListener = Callable[[], Awaitable[None]]
+# Fired only on a true offline↔online transition (first socket appears / last
+# socket disappears), with (user_id, online). Distinct from PresenceListener,
+# which fires on every connect/disconnect; session listeners must see each user
+# go online and offline exactly once per session so they can be paired into a
+# duration.
+SessionListener = Callable[[int, bool], Awaitable[None]]
 
 
 class WsRegistry:
@@ -33,6 +39,7 @@ class WsRegistry:
         # (not on every additional tab they open). Subscribers do their own
         # broadcasting; we only signal "presence set changed".
         self._presence_listeners: list[PresenceListener] = []
+        self._session_listeners: list[SessionListener] = []
         # Strong refs to in-flight listener tasks. `asyncio.create_task` only
         # keeps weak refs in the event loop, so a task whose handle we drop
         # can be garbage-collected mid-execution (Python 3.11+ docs warn
@@ -44,7 +51,12 @@ class WsRegistry:
 
     async def register(self, user_id: int, ws: WebSocket) -> None:
         async with self._lock:
+            # Empty set (incl. a freshly-defaulted one) → this is the user's
+            # first live socket, i.e. an offline→online transition.
+            became_online = len(self._by_user[user_id]) == 0
             self._by_user[user_id].add(ws)
+        if became_online:
+            self._notify_session(user_id, online=True)
         # Always notify — a "transition only" check (was offline → now online)
         # silently loses presence frames under reconnect races: when an old
         # socket hasn't been removed yet, the new socket's register call sees
@@ -54,6 +66,7 @@ class WsRegistry:
         await self._notify_presence()
 
     async def unregister(self, user_id: int, ws: WebSocket) -> None:
+        became_offline = False
         async with self._lock:
             sockets = self._by_user.get(user_id)
             if sockets is None:
@@ -61,6 +74,9 @@ class WsRegistry:
             sockets.discard(ws)
             if not sockets:
                 self._by_user.pop(user_id, None)
+                became_offline = True
+        if became_offline:
+            self._notify_session(user_id, online=False)
         # Same reasoning as register: notify unconditionally so a reconnect
         # race can't drop the "user is gone" frame either.
         await self._notify_presence()
@@ -87,6 +103,24 @@ class WsRegistry:
         subscriber can't take down the others or the calling WS handler.
         """
         self._presence_listeners.append(cb)
+
+    def add_session_listener(self, cb: SessionListener) -> None:
+        """Register a coroutine fired on each offline↔online transition with
+        (user_id, online). Used to log connect/disconnect for usage analytics.
+        Scheduled fire-and-forget, same as presence (see `_notify_session`)."""
+        self._session_listeners.append(cb)
+
+    def _notify_session(self, user_id: int, *, online: bool) -> None:
+        # Fire-and-forget for the same reason as `_notify_presence`: this runs
+        # inside the WS handler's `finally` mid close-handshake, where awaiting
+        # could deadlock. Strong refs held in `_pending_tasks`.
+        for cb in list(self._session_listeners):
+            try:
+                task = asyncio.create_task(cb(user_id, online))
+            except Exception:
+                continue
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._pending_tasks.discard)
 
     async def _notify_presence(self) -> None:
         # Fire-and-forget: the caller is often the WS handler's `finally`,

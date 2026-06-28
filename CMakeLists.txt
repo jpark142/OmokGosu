@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.26)
-project(omok_core LANGUAGES CXX VERSION 1.8.0)
+project(omok_core LANGUAGES CXX VERSION 1.8.1)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

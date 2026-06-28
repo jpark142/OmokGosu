@@ -7,6 +7,7 @@ Prod (Docker / Fly.io):
 """
 from __future__ import annotations
 
+import asyncio
 import os
 
 from fastapi import FastAPI
@@ -26,7 +27,9 @@ from omok_server.api import ws_rooms as ws_rooms_api
 from omok_server.db.engine import init_db
 from omok_server.game.room_manager import room_manager
 from omok_server.middleware.version_gate import ClientVersionGateMiddleware
+from omok_server.services import session_log
 from omok_server.static import mount_spa
+from omok_server.ws.registry import registry as ws_registry
 
 
 def _resolve_cors_origins() -> list[str]:
@@ -44,8 +47,20 @@ def _resolve_cors_origins() -> list[str]:
 def create_app() -> FastAPI:
     app = FastAPI(title="OmokGosu Server", version=__version__)
 
-    # SQLite tables (User, Match). Idempotent on subsequent boots.
+    # SQLite tables (User, Match, SessionLog). Idempotent on subsequent boots.
     init_db()
+
+    # Close any online sessions left dangling by the previous run's shutdown,
+    # then start logging connect/disconnect transitions for usage analytics.
+    session_log.close_orphans()
+
+    async def _on_presence_transition(user_id: int, online: bool) -> None:
+        # Offload the sync SQLite write to a thread so the event loop isn't
+        # blocked inside the WS close-handshake path.
+        fn = session_log.record_connect if online else session_log.record_disconnect
+        await asyncio.to_thread(fn, user_id)
+
+    ws_registry.add_session_listener(_on_presence_transition)
 
     # Install the broadcast hooks now that the WS modules are imported. This
     # keeps `game/room_manager.py` free of FastAPI imports.
