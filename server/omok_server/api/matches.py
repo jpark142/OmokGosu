@@ -1,8 +1,9 @@
 """Per-match read endpoint — powers the replay viewer.
 
-Only the participants of a match (the recorded black or white user) may view
-its moves. AI games count the lone human as a participant; nobody else can see
-their AI-loss kibitzed.
+Any logged-in user may view any match's moves. Game records are public within
+the app (the user-profile match list already exposes anyone's history), so the
+replay viewer matches that: HVH and AI games are all open. Auth is still
+required — anonymous callers get 401.
 """
 from __future__ import annotations
 
@@ -24,12 +25,6 @@ from omok_server.schemas import (
 router = APIRouter(prefix="/api/matches", tags=["matches"])
 
 
-def _color_of(match: Match, user_id: int) -> ColorStr | None:
-    if match.black_user_id == user_id: return ColorStr.BLACK
-    if match.white_user_id == user_id: return ColorStr.WHITE
-    return None
-
-
 def _winner_color(match: Match) -> ColorStr | None:
     if match.winner_user_id is None:
         return None
@@ -41,16 +36,14 @@ def _winner_color(match: Match) -> ColorStr | None:
 @router.get("/{match_id}", response_model=MatchDetail)
 def get_match(
     match_id: int,
-    user: Annotated[User, Depends(get_current_user)],
+    _viewer: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> MatchDetail:
     match = session.get(Match, match_id)
     if match is None:
         raise HTTPException(status_code=404, detail="match not found")
 
-    # Authorization: only the participants may view.
-    if _color_of(match, user.id) is None:
-        raise HTTPException(status_code=403, detail="not a participant of this match")
+    # No participant check: any logged-in user may view any match's replay.
 
     # Look up opponent username(s).
     def _name(uid: int | None) -> str | None:

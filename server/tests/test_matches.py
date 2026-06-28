@@ -65,7 +65,9 @@ def test_get_match_returns_moves_in_order(client) -> None:
     assert body["moves"][0]["r"] == 7 and body["moves"][0]["color"] == "BLACK"
 
 
-def test_non_participant_gets_403(client) -> None:
+def test_non_participant_can_view(client) -> None:
+    """Replays are public to any logged-in user — a non-participant gets 200,
+    not 403. (Match history is already public via the user-profile list.)"""
     tok_a, alice = _register(client)
     tok_b, bob = _register(client)
     tok_c, _ = _register(client)  # not in the match
@@ -73,7 +75,8 @@ def test_non_participant_gets_403(client) -> None:
     mid = _make_match(black_uid=alice["id"], white_uid=bob["id"],
                       winner_uid=alice["id"], moves=[])
     r = client.get(f"/api/matches/{mid}", headers={"Authorization": f"Bearer {tok_c}"})
-    assert r.status_code == 403
+    assert r.status_code == 200, r.text
+    assert r.json()["match_id"] == mid
 
 
 def test_unknown_match_404(client) -> None:
