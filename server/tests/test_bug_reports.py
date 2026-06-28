@@ -38,11 +38,25 @@ def fake_github_ok(monkeypatch):
 
 @pytest.fixture
 def fake_github_down(monkeypatch):
-    """Stub create_bug_issue to return None — simulates API down / token
-    missing. The endpoint should still 201 with mirrored='local_only'."""
+    """Stub create_bug_issue to return None with NO token configured —
+    simulates the mirror being intentionally off. The endpoint should still
+    201 with mirrored='local_only' and stay quiet about it."""
     async def _fake(*, title: str, body: str, labels=None):
         return None
     monkeypatch.setattr(github_issues, "create_bug_issue", _fake)
+    monkeypatch.setattr(github_issues, "is_configured", lambda: False)
+
+
+@pytest.fixture
+def fake_github_misfire(monkeypatch):
+    """Stub create_bug_issue to return None WHILE a token is configured —
+    simulates a real mirror failure (bad token, API 4xx/5xx, network). The
+    endpoint should 201 with mirrored='github_failed' so the reporter learns
+    their report didn't reach GitHub."""
+    async def _fake(*, title: str, body: str, labels=None):
+        return None
+    monkeypatch.setattr(github_issues, "create_bug_issue", _fake)
+    monkeypatch.setattr(github_issues, "is_configured", lambda: True)
 
 
 def test_report_creates_row_and_mirrors_to_github(auth_client, fake_github_ok) -> None:
@@ -101,6 +115,28 @@ def test_report_with_github_down_returns_local_only(auth_client, fake_github_dow
     assert body["github_issue_url"] is None
 
     # Row exists in DB regardless.
+    with Session(engine) as db:
+        row = db.exec(select(BugReport).where(BugReport.id == body["id"])).one()
+        assert row.github_issue_number is None
+
+
+def test_report_mirror_failure_reports_github_failed(
+    auth_client, fake_github_misfire
+) -> None:
+    client, _, _ = auth_client
+    r = client.post(
+        "/api/bug-reports",
+        json={"description": "토큰은 있는데 미러가 깨졌어요"},
+    )
+    assert r.status_code == 201
+    body = r.json()
+    # Configured mirror that failed must NOT be silently downgraded to
+    # local_only — the reporter needs to know it didn't reach GitHub.
+    assert body["mirrored"] == "github_failed"
+    assert body["github_issue_number"] is None
+    assert body["github_issue_url"] is None
+
+    # Still persisted locally.
     with Session(engine) as db:
         row = db.exec(select(BugReport).where(BugReport.id == body["id"])).one()
         assert row.github_issue_number is None

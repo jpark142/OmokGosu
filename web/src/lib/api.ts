@@ -72,7 +72,7 @@ export interface BugReportResponse {
   id: number;
   github_issue_number: number | null;
   github_issue_url: string | null;
-  mirrored: "github" | "local_only";
+  mirrored: "github" | "github_failed" | "local_only";
 }
 
 export function submitBugReport(req: BugReportRequest): Promise<BugReportResponse> {

@@ -11,6 +11,7 @@ Rate-limited at 5 reports per hour per user, enforced in-process; this is
 """
 from __future__ import annotations
 
+import logging
 import time
 from typing import Annotated, Literal
 
@@ -22,6 +23,8 @@ from omok_server.auth.deps import get_current_user, get_db_session
 from omok_server.db.models import BugReport, User
 from omok_server.services import github_issues
 from omok_server.version import SERVER_VERSION
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/bug-reports", tags=["bug-reports"])
 
@@ -61,8 +64,12 @@ class BugReportResponse(BaseModel):
     id: int
     github_issue_number: int | None = None
     github_issue_url: str | None = None
-    # Used by the frontend to render the success toast variant.
-    mirrored: Literal["github", "local_only"] = "local_only"
+    # Used by the frontend to pick the toast variant:
+    #   github        — mirrored to a GitHub Issue (success toast w/ link)
+    #   github_failed — mirror was configured but the API call failed; the
+    #                   report is saved locally but NOT on GitHub (warn toast)
+    #   local_only    — no mirror configured; saved locally as designed (plain)
+    mirrored: Literal["github", "github_failed", "local_only"] = "local_only"
 
 
 def _build_issue_title(description: str, reporter: str) -> str:
@@ -146,5 +153,16 @@ async def create_bug_report(
             github_issue_url=issue.html_url,
             mirrored="github",
         )
+
+    # issue is None for two very different reasons. If a token IS configured,
+    # the mirror was meant to happen and didn't — that's a real failure the
+    # reporter should hear about (their report won't show up on GitHub, and an
+    # operator needs to look). If no token is configured, local-only is the
+    # intended behavior and we stay quiet.
+    if github_issues.is_configured():
+        _log.warning(
+            "bug report %s saved locally but GitHub mirror failed", report.id
+        )
+        return BugReportResponse(id=report.id, mirrored="github_failed")
 
     return BugReportResponse(id=report.id, mirrored="local_only")

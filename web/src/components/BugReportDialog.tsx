@@ -59,6 +59,13 @@ export default function BugReportDialog({ open, onClose }: Props) {
             duration: 8000,
           },
         );
+      } else if (res.mirrored === "github_failed") {
+        // Saved locally, but the GitHub mirror was supposed to run and didn't.
+        // Tell the reporter plainly so they don't expect to see it on GitHub.
+        toast.warning(
+          "제보는 접수됐지만 GitHub 이슈 등록에 실패했어요. 내용은 저장됐고 운영자가 확인합니다.",
+          { duration: 8000 },
+        );
       } else {
         toast.success("감사합니다. 제보가 접수되었습니다.");
       }
