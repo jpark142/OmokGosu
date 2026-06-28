@@ -92,6 +92,7 @@ export interface LeaderboardEntry {
 
 export interface Leaderboard {
   entries: LeaderboardEntry[];
+  total: number;  // total ranked users, for page-count math
 }
 
 export interface MatchDetail {

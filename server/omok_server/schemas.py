@@ -198,6 +198,9 @@ class LeaderboardEntry(BaseModel):
 
 class Leaderboard(BaseModel):
     entries: list[LeaderboardEntry]
+    # Total number of ranked users (wins+losses > 0), independent of the
+    # requested page. The client uses it to compute how many pages exist.
+    total: int = 0
 
 
 class AuthCredentials(BaseModel):

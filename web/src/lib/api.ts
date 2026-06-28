@@ -51,8 +51,10 @@ export function getMatch(matchId: number): Promise<MatchDetail> {
   return http.get<MatchDetail>(`/api/matches/${matchId}`);
 }
 
-export function getLeaderboard(limit = 20): Promise<Leaderboard> {
-  return http.get<Leaderboard>(`/api/users/leaderboard?limit=${limit}`);
+export function getLeaderboard(limit = 20, offset = 0): Promise<Leaderboard> {
+  return http.get<Leaderboard>(
+    `/api/users/leaderboard?limit=${limit}&offset=${offset}`,
+  );
 }
 
 export function getUser(userId: number): Promise<UserSummary> {

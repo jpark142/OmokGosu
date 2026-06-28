@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from omok_server.auth.deps import get_current_user, get_db_session
@@ -31,19 +32,29 @@ def leaderboard(
     _viewer: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_db_session)],
     limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ) -> Leaderboard:
-    """Top users by total wins. Users with zero games are excluded so the
-    board doesn't fill up with brand-new accounts. Stats include AI-game
-    wins/losses — same as displayed elsewhere in the UI."""
+    """One page of the global ranking, ordered by total wins. Users with zero
+    games are excluded so the board doesn't fill up with brand-new accounts.
+    Stats include AI-game wins/losses — same as displayed elsewhere in the UI.
+
+    `offset`/`limit` page through the board; `rank` is absolute (1-based across
+    the whole board, not per-page), and the response carries `total` so the
+    client can render page controls."""
+    ranked = (User.wins + User.losses) > 0
+    total = session.exec(
+        select(func.count()).select_from(User).where(ranked)
+    ).one()
     rows = session.exec(
         select(User)
-        .where((User.wins + User.losses) > 0)
+        .where(ranked)
         .order_by(User.wins.desc(), User.losses.asc(), User.id.asc())
+        .offset(offset)
         .limit(limit)
     ).all()
     entries = [
         LeaderboardEntry(
-            rank=i + 1,
+            rank=offset + i + 1,
             user_id=u.id,
             username=u.username,
             wins=u.wins,
@@ -52,7 +63,7 @@ def leaderboard(
         )
         for i, u in enumerate(rows)
     ]
-    return Leaderboard(entries=entries)
+    return Leaderboard(entries=entries, total=total)
 
 
 @router.get("/{user_id}", response_model=UserSummary)

@@ -75,3 +75,36 @@ def test_leaderboard_respects_limit(client) -> None:
                    headers={"Authorization": f"Bearer {tok}"})
     entries = r.json()["entries"]
     assert len(entries) <= 3
+
+
+def test_leaderboard_returns_total(client) -> None:
+    tok, _ = _register(client)
+    _make_user(username=_u(), wins=4, losses=1)
+    _make_user(username=_u(), wins=3, losses=1)
+    r = client.get("/api/users/leaderboard?limit=20",
+                   headers={"Authorization": f"Bearer {tok}"})
+    body = r.json()
+    # total counts every ranked user (wins+losses>0), independent of the page.
+    assert body["total"] >= 2
+    assert body["total"] >= len(body["entries"])
+
+
+def test_leaderboard_offset_paginates_with_absolute_ranks(client) -> None:
+    tok, _ = _register(client)
+    # Ensure at least 25 ranked users exist so offset=20 returns a page.
+    for i in range(25):
+        _make_user(username=_u(), wins=100 + i, losses=0)
+
+    r1 = client.get("/api/users/leaderboard?limit=20&offset=0",
+                    headers={"Authorization": f"Bearer {tok}"})
+    r2 = client.get("/api/users/leaderboard?limit=20&offset=20",
+                    headers={"Authorization": f"Bearer {tok}"})
+    p1, p2 = r1.json()["entries"], r2.json()["entries"]
+
+    # rank is absolute across pages, not reset per-page.
+    assert p1[0]["rank"] == 1
+    assert p2[0]["rank"] == 21
+    # pages don't overlap.
+    ids1 = {e["user_id"] for e in p1}
+    ids2 = {e["user_id"] for e in p2}
+    assert ids1.isdisjoint(ids2)

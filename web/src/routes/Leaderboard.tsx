@@ -15,25 +15,39 @@ function rankBadge(rank: number): { icon: string; color: string } {
   return { icon: `${rank}`, color: "text-stone-500" };
 }
 
+const PAGE_SIZE = 20;
+
 export default function Leaderboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0); // 0-based
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    getLeaderboard(50)
+    setLoading(true);
+    getLeaderboard(PAGE_SIZE, page * PAGE_SIZE)
       .then((r) => {
-        if (!cancelled) setEntries(r.entries);
+        if (cancelled) return;
+        setEntries(r.entries);
+        setTotal(r.total);
+        setError(null);
       })
       .catch(() => {
         if (!cancelled) setError("불러오기 실패");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [page]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="min-h-screen p-4 md:p-6 bg-stone-50">
@@ -122,6 +136,29 @@ export default function Leaderboard() {
             </table>
           )}
         </div>
+
+        {!error && total > 0 && (
+          <div className="flex items-center justify-center gap-4">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0 || loading}
+              className="px-3 py-1.5 text-sm border border-stone-300 rounded text-stone-700 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              ← 이전
+            </button>
+            <span className="text-sm text-stone-500 tabular-nums">
+              {page + 1} / {totalPages} 페이지
+              <span className="text-stone-400"> · 총 {total}명</span>
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1 || loading}
+              className="px-3 py-1.5 text-sm border border-stone-300 rounded text-stone-700 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              다음 →
+            </button>
+          </div>
+        )}
 
         <p className="text-xs text-stone-500 text-center">
           AI 게임 결과 포함. 경기를 한 번도 끝내지 않은 사용자는 표시되지 않습니다.
