@@ -2,6 +2,7 @@
 // listed first, then the live spectators). Each row links to the user's
 // profile via UserHoverCard so the reader can peek at recent matches.
 
+import OperatorBadge from "@/components/OperatorBadge";
 import UserHoverCard from "@/components/UserHoverCard";
 import type { ColorStr, PlayerInfo, SpectatorInfo } from "@/types/protocol";
 
@@ -59,6 +60,7 @@ function PlayerRow({ color, info }: { color: ColorStr; info: PlayerInfo | undefi
       ) : (
         <span className="text-stone-400">—</span>
       )}
+      {info?.kind === "human" && <OperatorBadge username={info.name} />}
       {info?.kind === "human" && <RankBadge rank={info.rank} />}
       {stats && <span className="text-xs text-stone-500 ml-auto">{stats}</span>}
     </div>
@@ -70,6 +72,7 @@ function SpectatorRow({ s }: { s: SpectatorInfo }) {
   return (
     <div className="flex items-center gap-2 text-sm">
       <UserHoverCard userId={s.user_id}>{s.username}</UserHoverCard>
+      <OperatorBadge username={s.username} />
       <RankBadge rank={s.rank} />
       {stats && <span className="text-xs text-stone-500 ml-auto">{stats}</span>}
     </div>

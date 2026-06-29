@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import OperatorBadge from "@/components/OperatorBadge";
 import { getRecentMatches, getUser } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { HttpError } from "@/lib/fetcher";
@@ -156,6 +157,7 @@ export default function UserProfile() {
         <div className="bg-white rounded-md border border-stone-200 p-5">
           <div className="flex items-center gap-3 mb-3">
             <h1 className="text-2xl font-bold">{profile.username}</h1>
+            <OperatorBadge username={profile.username} className="text-xs px-1.5 py-0.5" />
             {isMe && (
               <span className="text-xs px-2 py-0.5 bg-stone-200 rounded">나</span>
             )}

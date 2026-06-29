@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import OperatorBadge from "@/components/OperatorBadge";
 import { useAuth } from "@/lib/auth";
 import type { ChatMessage } from "@/types/protocol";
 
@@ -108,6 +109,7 @@ export default function Chat({
                 >
                   {m.username}
                 </Link>
+                <OperatorBadge username={m.username} />
                 <span className="text-stone-700 break-words min-w-0">{m.text}</span>
               </div>
             );

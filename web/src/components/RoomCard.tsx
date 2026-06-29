@@ -1,3 +1,4 @@
+import OperatorBadge from "@/components/OperatorBadge";
 import UserHoverCard from "@/components/UserHoverCard";
 import type { RoomSummary } from "@/types/protocol";
 
@@ -48,12 +49,14 @@ export default function RoomCard({ room, currentUserId, onJoin, onEnter, onSpect
         </div>
         <div className="text-xs text-stone-500">
           <UserHoverCard userId={room.host.user_id}>{room.host.username}</UserHoverCard>
+          <OperatorBadge username={room.host.username} className="ml-1 align-middle" />
           {" "}
           ({room.host.wins}승{(room.host.draws ?? 0) > 0 && ` ${room.host.draws}무`} {room.host.losses}패)
           {room.guest && (
             <>
               {" vs "}
               <UserHoverCard userId={room.guest.user_id}>{room.guest.username}</UserHoverCard>
+              <OperatorBadge username={room.guest.username} className="ml-1 align-middle" />
               {" "}
               ({room.guest.wins}승{(room.guest.draws ?? 0) > 0 && ` ${room.guest.draws}무`} {room.guest.losses}패)
             </>

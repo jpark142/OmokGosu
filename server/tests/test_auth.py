@@ -34,6 +34,27 @@ def test_register_duplicate_username_returns_409(client) -> None:
     assert r2.status_code == 409
 
 
+def test_register_duplicate_username_is_case_insensitive(client) -> None:
+    base = _u()  # all-lowercase latin
+    r = client.post("/api/auth/register", json={"username": base, "password": "pw1234"})
+    assert r.status_code == 201
+    # Same name with different casing must be rejected as a duplicate.
+    r2 = client.post(
+        "/api/auth/register",
+        json={"username": base.upper(), "password": "other"},
+    )
+    assert r2.status_code == 409
+
+
+def test_login_is_case_insensitive(client) -> None:
+    base = _u()
+    client.post("/api/auth/register", json={"username": base, "password": "pw1234"})
+    # Log in with a different case than registered.
+    r = client.post("/api/auth/login", json={"username": base.upper(), "password": "pw1234"})
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["username"] == base  # stored form preserved
+
+
 def test_login_wrong_password_returns_401(client) -> None:
     username = _u()
     client.post("/api/auth/register", json={"username": username, "password": "pw1234"})

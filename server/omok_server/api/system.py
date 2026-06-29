@@ -12,6 +12,7 @@ import os
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from omok_server.services.operators import operator_usernames
 from omok_server.version import MIN_CLIENT_VERSION, SERVER_VERSION
 
 router = APIRouter(prefix="/api", tags=["system"])
@@ -38,6 +39,13 @@ class HealthInfo(BaseModel):
     version: str
 
 
+class OperatorsInfo(BaseModel):
+    # Operator usernames, in display form. Public on purpose — the badge is
+    # meant to be visible, so there's nothing secret about who the operators
+    # are. The client compares case-insensitively when rendering the badge.
+    usernames: list[str]
+
+
 @router.get("/version", response_model=VersionInfo)
 def version() -> VersionInfo:
     """No auth — clients poll this before any other request."""
@@ -46,6 +54,13 @@ def version() -> VersionInfo:
         min_client_version=MIN_CLIENT_VERSION,
         dev_mode=_is_dev_mode(),
     )
+
+
+@router.get("/operators", response_model=OperatorsInfo)
+def operators() -> OperatorsInfo:
+    """No auth — the operator badge is public info the client renders for
+    every visible username."""
+    return OperatorsInfo(usernames=operator_usernames())
 
 
 @router.get("/health", response_model=HealthInfo)

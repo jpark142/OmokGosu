@@ -1,6 +1,6 @@
 [project]
 name = "omok-server"
-version = "1.9.2"
+version = "1.10.0"
 description = "OmokGosu FastAPI server: REST + WebSocket game host wrapping omok_core C++ engine"
 requires-python = ">=3.11"
 dependencies = [

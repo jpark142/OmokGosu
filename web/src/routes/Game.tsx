@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import Board from "@/components/Board";
 import Chat from "@/components/Chat";
 import Clock from "@/components/Clock";
+import OperatorBadge from "@/components/OperatorBadge";
 import ParticipantsPanel from "@/components/ParticipantsPanel";
 import { useGameSocket } from "@/hooks/useGameSocket";
 import { useAuth } from "@/lib/auth";
@@ -47,7 +48,10 @@ function PlayerLine({ info }: { info: PlayerInfo | undefined }) {
       <div className="text-xs uppercase text-stone-500">
         {info.kind === "ai" ? "AI" : "Player"}
       </div>
-      <div className="font-medium">{info.name}</div>
+      <div className="font-medium flex items-center gap-1">
+        {info.name}
+        {info.kind !== "ai" && <OperatorBadge username={info.name} />}
+      </div>
     </div>
   );
 }

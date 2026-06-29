@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import OperatorBadge from "@/components/OperatorBadge";
 import UserHoverCard from "@/components/UserHoverCard";
 import { getLeaderboard } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -108,6 +109,7 @@ export default function Leaderboard() {
                         <UserHoverCard userId={e.user_id}>
                           {e.username}
                         </UserHoverCard>
+                        <OperatorBadge username={e.username} className="ml-1.5 align-middle" />
                         {isMe && (
                           <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-stone-200 rounded">
                             나

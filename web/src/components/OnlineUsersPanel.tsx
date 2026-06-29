@@ -4,6 +4,7 @@
 
 import { Link } from "react-router-dom";
 
+import OperatorBadge from "@/components/OperatorBadge";
 import { useAuth } from "@/lib/auth";
 import type { OnlinePresenceUser } from "@/types/protocol";
 
@@ -49,6 +50,7 @@ export default function OnlineUsersPanel({ users }: Props) {
                   >
                     {u.username}
                   </span>
+                  <OperatorBadge username={u.username} />
                   <span className="text-[11px] text-stone-400 tabular-nums shrink-0">
                     {u.wins}승
                     {u.draws > 0 && ` · ${u.draws}무`}

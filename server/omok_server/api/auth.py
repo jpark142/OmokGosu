@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from omok_server.auth.deps import get_current_user, get_db_session
@@ -46,7 +47,12 @@ def register(
         username = validate_username(body.username)
     except UsernameError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    existing = session.exec(select(User).where(User.username == username)).first()
+    # Case-insensitive uniqueness: "Apple" and "apple" must not coexist, so a
+    # new name can't impersonate an existing one by case alone. (Hangul has no
+    # case, so this only affects Latin names.)
+    existing = session.exec(
+        select(User).where(func.lower(User.username) == username.lower())
+    ).first()
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="username already taken")
     user = User(username=username, password_hash=hash_password(body.password))
@@ -64,7 +70,14 @@ async def login(
     body: AuthCredentials,
     session: Annotated[Session, Depends(get_db_session)],
 ) -> AuthResponse:
-    user = session.exec(select(User).where(User.username == body.username)).first()
+    # Match the username case-insensitively (registration now enforces
+    # case-insensitive uniqueness). If legacy case-collisions exist, prefer an
+    # exact-case match so each side can still log into its own account.
+    typed = (body.username or "").strip()
+    candidates = session.exec(
+        select(User).where(func.lower(User.username) == typed.lower())
+    ).all()
+    user = next((u for u in candidates if u.username == typed), candidates[0] if candidates else None)
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid username or password"
