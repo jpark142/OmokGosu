@@ -1,8 +1,11 @@
 """Username validation.
 
-Allowed characters: Hangul syllables (가-힣), Hangul Jamo (ㄱ-ㅎ / ㅏ-ㅣ —
-covers things like "ㅋㅋ"), Latin letters, and digits. No spaces, no
-punctuation, no emoji.
+Allowed characters: Hangul syllables (가-힣), Hangul Jamo (ㄱ-ㅎ / ㅏ-ㅣ),
+Latin letters, and digits. No spaces, no punctuation, no emoji.
+
+Jamo are allowed *within* a name (e.g. "크크ㅋ") but a name made up of jamo
+ALONE is rejected — that bans low-effort/abusive names like "ㅋㅋ", "ㅗㅗ".
+Names are also screened against the chat profanity filter.
 
 Width limit: treats Korean / CJK characters as 2 display units and
 Latin / digits as 1 unit. With a budget of `MAX_USERNAME_WIDTH = 12`,
@@ -15,13 +18,16 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from omok_server.services.chat_filter import should_blur
+
 MIN_USERNAME_WIDTH = 4        # display-width units  (= 2 Korean chars or 4 Latin)
 MAX_USERNAME_WIDTH = 12       # display-width units  (= 6 Korean chars or 12 Latin)
 
-# Hangul Jamo block (ㄱ-ㅣ) is included so "ㅋㅋ" style names work — single
-# jamo are normal in chat-culture nicknames. Combining/half-width Hangul
-# Jamo blocks are NOT included to keep things simple.
+# Jamo (ㄱ-ㅣ) may appear inside a name, but a name must contain at least one
+# "real" character (complete Hangul syllable, Latin letter, or digit).
 _ALLOWED_RE = re.compile(r"^[0-9A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ]+$")
+# A name that is ENTIRELY Hangul jamo — disallowed (blocks "ㅋㅋ", "ㅗㅗ", …).
+_JAMO_ONLY_RE = re.compile(r"^[ㄱ-ㅎㅏ-ㅣ]+$")
 
 
 class UsernameError(ValueError):
@@ -55,6 +61,12 @@ def validate_username(raw: str) -> str:
 
     if not _ALLOWED_RE.match(name):
         raise UsernameError("닉네임은 한글, 영문, 숫자만 사용할 수 있습니다 (공백·특수문자 불가)")
+
+    if _JAMO_ONLY_RE.match(name):
+        raise UsernameError("자음·모음(ㄱㄴㄷ, ㅏㅑㅓ)만으로는 닉네임을 만들 수 없습니다")
+
+    if should_blur(name):
+        raise UsernameError("사용할 수 없는 닉네임입니다 (부적절한 표현이 포함되어 있습니다)")
 
     w = width(name)
     if w < MIN_USERNAME_WIDTH:
