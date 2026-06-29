@@ -151,6 +151,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Mark a deliberate logout BEFORE the request: the server force-closes our
+    // WS (code 4401), and without this sentinel the close handler would mistake
+    // it for a "logged in elsewhere" displacement and show that toast.
+    (window as unknown as { __omokJustLoggedOutAt?: number }).__omokJustLoggedOutAt = Date.now();
     // Server-side: leave any rooms the user is in (deletes host rooms).
     // If it fails (network, etc.), still log out locally so the user isn't
     // stranded — orphaned rooms are recoverable next session.
@@ -162,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setTokenState(null);
     setUser(null);
+    toast.success("로그아웃되었습니다.");
   }, []);
 
   const refreshMe = useCallback(async () => {

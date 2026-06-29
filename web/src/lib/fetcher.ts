@@ -100,8 +100,19 @@ export const http = {
  * Suppressed within ~3s of a fresh login so the server-side close that retires
  * the *previous* token doesn't kick the new session out. */
 export function handleWsUnauthorized(): void {
-  const sentinel = (window as unknown as { __omokJustLoggedInAt?: number }).__omokJustLoggedInAt;
-  if (sentinel && Date.now() - sentinel < 3000) return;
+  const w = window as unknown as {
+    __omokJustLoggedInAt?: number;
+    __omokJustLoggedOutAt?: number;
+  };
+  // Fresh login: the server retires the *previous* token's sockets — ignore.
+  if (w.__omokJustLoggedInAt && Date.now() - w.__omokJustLoggedInAt < 3000) return;
+  // Deliberate logout: the server closed our sockets on purpose. Drop the
+  // token but don't show the "logged in elsewhere" toast — logout() shows its
+  // own message.
+  if (w.__omokJustLoggedOutAt && Date.now() - w.__omokJustLoggedOutAt < 3000) {
+    setToken(null);
+    return;
+  }
   setToken(null);
   window.dispatchEvent(
     new CustomEvent("omok:unauthorized", { detail: { reason: "session displaced" } }),
