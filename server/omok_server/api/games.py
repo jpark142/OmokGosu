@@ -84,7 +84,14 @@ async def get_game(
     s = manager.get(game_id)
     if s is None:
         raise HTTPException(status_code=404, detail="game not found")
-    return s.to_state_msg()
+    state = s.to_state_msg()
+    # Reveal black's forbidden-move (금수) markers only to the black player;
+    # strip them for white and spectators so the hints don't leak.
+    black = s.players.get(ColorStr.BLACK)
+    is_black_player = black is not None and black.user_id is not None and black.user_id == user.id
+    if not is_black_player and state.forbidden_squares:
+        state = state.model_copy(update={"forbidden_squares": []})
+    return state
 
 
 @router.post("/games/{game_id}/resign")

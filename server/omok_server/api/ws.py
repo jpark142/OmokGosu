@@ -51,6 +51,9 @@ BROADCAST_SEND_TIMEOUT_S = 1.0
 @dataclass
 class SessionBus:
     sockets: set[WebSocket] = field(default_factory=set)
+    # socket → user_id, so state broadcasts can be personalized (e.g. reveal
+    # black's forbidden-move markers only to the black player).
+    user_by_socket: dict[WebSocket, int] = field(default_factory=dict)
     ticker_task: asyncio.Task | None = None
 
 
@@ -100,6 +103,58 @@ async def _broadcast(game_id: str, payload) -> None:
     for dead_ws in results:
         if dead_ws is not None:
             bus.sockets.discard(dead_ws)
+            bus.user_by_socket.pop(dead_ws, None)
+
+
+def _black_user_id(session: GameSession) -> int | None:
+    info = session.players.get(ColorStr.BLACK)
+    return info.user_id if info is not None else None
+
+
+def _state_for_recipient(state, reveal_forbidden: bool):
+    """The same state, with forbidden-move markers stripped unless the
+    recipient is allowed to see them (only the black player is)."""
+    if reveal_forbidden or not state.forbidden_squares:
+        return state
+    return state.model_copy(update={"forbidden_squares": []})
+
+
+async def _broadcast_state(session: GameSession, game_id: str) -> None:
+    """Broadcast game state, revealing black's forbidden-move (금수) markers
+    only to the black player. White and spectators receive the identical state
+    with `forbidden_squares` stripped, so the markers don't leak to them."""
+    bus = buses.get(game_id)
+    if bus is None:
+        return
+    state = session.to_state_msg()
+    if not state.forbidden_squares:
+        # Nothing to hide (not black's turn, or game over) — one shared body.
+        await _broadcast(game_id, state)
+        return
+
+    black_uid = _black_user_id(session)
+    reveal_body = json.dumps(state.model_dump(), default=str)
+    hide_body = json.dumps(
+        _state_for_recipient(state, reveal_forbidden=False).model_dump(), default=str
+    )
+    sockets = list(bus.sockets)
+    if not sockets:
+        return
+
+    async def _send(ws: WebSocket) -> WebSocket | None:
+        uid = bus.user_by_socket.get(ws)
+        body = reveal_body if (black_uid is not None and uid == black_uid) else hide_body
+        try:
+            await asyncio.wait_for(ws.send_text(body), timeout=BROADCAST_SEND_TIMEOUT_S)
+            return None
+        except Exception:
+            return ws
+
+    results = await asyncio.gather(*(_send(ws) for ws in sockets))
+    for dead_ws in results:
+        if dead_ws is not None:
+            bus.sockets.discard(dead_ws)
+            bus.user_by_socket.pop(dead_ws, None)
 
 
 def _now_ms() -> int:
@@ -164,7 +219,7 @@ async def _broadcast_move_and_state(session: GameSession, game_id: str) -> None:
                 last_move_at_ms=_now_ms(),
             ),
         )
-    await _broadcast(game_id, session.to_state_msg())
+    await _broadcast_state(session, game_id)
     if session.is_over():
         await _broadcast(game_id, await _emit_game_over_msg(session, GameOverReason.FIVE))
 
@@ -206,7 +261,7 @@ async def _start_ticker_if_needed(session: GameSession) -> None:
                                 session.game_id,
                                 await _emit_game_over_msg(session, GameOverReason.TIMEOUT),
                             )
-                        await _broadcast(session.game_id, session.to_state_msg())
+                        await _broadcast_state(session, session.game_id)
                         return
                     snap = STimerTickMsg(
                         clocks=ClocksSnapshot(
@@ -246,15 +301,20 @@ async def game_ws(ws: WebSocket, game_id: str):
     await ws.accept()
     bus = _bus_for(game_id)
     bus.sockets.add(ws)
+    bus.user_by_socket[ws] = user.id
     await ws_registry.register(user.id, ws)
     newly_joined_spectator = False
     if is_spectator:
         async with session.lock:
             newly_joined_spectator = session.add_spectator(user.id, user.username, ws)
-    await _send_json(ws, session.to_state_msg())
+    # Reveal forbidden-move markers only to the black player.
+    is_black_player = user.id is not None and user.id == _black_user_id(session)
+    await _send_json(
+        ws, _state_for_recipient(session.to_state_msg(), reveal_forbidden=is_black_player)
+    )
     if newly_joined_spectator:
         # Tell the players + other spectators a new viewer arrived.
-        await _broadcast(game_id, session.to_state_msg())
+        await _broadcast_state(session, game_id)
     # Recent chat history for this game — only when non-empty.
     history = chat_helpers.history_for(f"game:{game_id}")
     if history is not None:
@@ -308,7 +368,7 @@ async def game_ws(ws: WebSocket, game_id: str):
                     session.resign(color)
                     over_msg = await _emit_game_over_msg(session, GameOverReason.RESIGN)
                 await _broadcast(game_id, over_msg)
-                await _broadcast(game_id, session.to_state_msg())
+                await _broadcast_state(session, game_id)
                 continue
             if mtype == "move":
                 r = msg.get("r")
@@ -341,12 +401,13 @@ async def game_ws(ws: WebSocket, game_id: str):
         pass
     finally:
         bus.sockets.discard(ws)
+        bus.user_by_socket.pop(ws, None)
         await ws_registry.unregister(user.id, ws)
         if is_spectator:
             async with session.lock:
                 spectator_left = session.remove_spectator(user.id, ws)
             if spectator_left:
-                await _broadcast(game_id, session.to_state_msg())
+                await _broadcast_state(session, game_id)
         if not bus.sockets and bus.ticker_task is not None:
             bus.ticker_task.cancel()
             bus.ticker_task = None
