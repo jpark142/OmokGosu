@@ -143,6 +143,48 @@ def test_chat_spam_triggers_3min_mute_and_system_announce(client) -> None:
         assert "채팅 금지 중" in blocked["message"]
 
 
+def test_lobby_chat_survives_restart(client) -> None:
+    """Lobby chat is persisted to the DB, so a restart (simulated here by
+    dropping the in-memory buffer + hydration latch while keeping the DB rows)
+    still surfaces recent history on the next connect."""
+    tok, _ = _register(client)
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
+        ws.receive_json()  # lobby_snapshot
+        ws.receive_json()  # presence frame
+        ws.send_text(json.dumps({"type": "chat", "text": "persist-me"}))
+        ws.receive_json()  # broadcast
+
+    # Simulate a server restart: wipe in-memory state but leave the DB intact.
+    chat_helpers._buffers.clear()
+    chat_helpers._lobby_hydrated = False
+
+    with client.websocket_connect(f"/ws/lobby?token={tok}") as ws:
+        assert ws.receive_json()["type"] == "lobby_snapshot"
+        history = ws.receive_json()
+        assert history["type"] == "chat_history"
+        assert "persist-me" in [m["text"] for m in history["messages"]]
+
+
+def test_lobby_chat_retention_caps_rows() -> None:
+    """Persisted lobby history is bounded: inserts prune everything older than
+    the newest RETENTION rows, so the table can't grow without limit."""
+    from omok_server.services import lobby_chat_store
+
+    lobby_chat_store.clear_all()
+    overflow = 25
+    for i in range(lobby_chat_store.RETENTION + overflow):
+        lobby_chat_store.persist(
+            {"user_id": 1, "username": "u", "text": f"m{i}", "server_time_ms": i}
+        )
+
+    rows = lobby_chat_store.load_recent(limit=10_000)
+    assert len(rows) == lobby_chat_store.RETENTION
+    # The oldest `overflow` inserts were pruned; the newest survives last.
+    texts = [r["text"] for r in rows]
+    assert "m0" not in texts
+    assert texts[-1] == f"m{lobby_chat_store.RETENTION + overflow - 1}"
+
+
 def test_room_chat_isolated_from_lobby(client) -> None:
     """A message in a room should NOT show up on the lobby channel."""
     tok, _ = _register(client)

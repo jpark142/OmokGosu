@@ -67,6 +67,25 @@ class Match(SQLModel, table=True):
     moves_json: str = Field(default="[]")
 
 
+class LobbyChat(SQLModel, table=True):
+    """One persisted lobby (global) chat message per row.
+
+    Lobby chat used to live only in an in-memory ring buffer, so a deploy /
+    restart wiped the history. We now mirror each lobby message here so the
+    buffer can be re-hydrated on boot. Only the lobby channel is persisted —
+    room/game chat stays ephemeral by design. Bounded on disk: inserts prune
+    everything older than the newest `RETENTION` rows (see
+    services.lobby_chat_store), so this table never grows without limit."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(default=0)              # 0 = system message
+    username: str = Field(max_length=64)
+    text: str = Field(max_length=200)
+    is_system: bool = Field(default=False)
+    role: str = Field(default="player", max_length=16)
+    server_time_ms: int = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class SessionLog(SQLModel, table=True):
     """One online session per row: from a user's first live socket to their
     last. Multiple tabs collapse into a single session because the WsRegistry

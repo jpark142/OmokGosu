@@ -18,6 +18,13 @@ from omok_server.services.chat_filter import mask_bad_words
 CHAT_BUFFER_SIZE = 50
 MAX_MESSAGE_LEN = 200
 
+# The lobby (global) channel is persisted to the DB (see
+# services.lobby_chat_store) so history survives restarts/deploys; it also
+# keeps a larger in-memory window than room/game channels. Everything else
+# stays ephemeral.
+LOBBY_CHAT_KEY = "lobby"
+LOBBY_BUFFER_SIZE = 100
+
 # Rate limit: a user may send up to RATE_LIMIT messages per RATE_WINDOW_S
 # seconds on any one channel. Per-(channel, user_id) bucket.
 RATE_LIMIT = 10
@@ -34,6 +41,11 @@ SPAM_MUTE_S = 180.0  # 3 minutes
 # Channel-keyed buffers. Lobby uses a single global buffer keyed by the
 # sentinel "lobby"; room/game channels use their respective id.
 _buffers: dict[str, deque[dict]] = {}
+
+# The lobby buffer is hydrated from the DB exactly once per process (on first
+# use). Tracked here so re-creating the buffer (e.g. tests clearing state)
+# doesn't replay persisted rows unless the DB is cleared too.
+_lobby_hydrated: bool = False
 
 # (channel_key, user_id) -> recent send timestamps (sliding window).
 _rate_state: dict[tuple[str, int], list[float]] = {}
@@ -52,11 +64,34 @@ class ChatResult(Enum):
 
 
 def _key_buffer(key: str) -> deque[dict]:
+    global _lobby_hydrated
     buf = _buffers.get(key)
     if buf is None:
-        buf = deque(maxlen=CHAT_BUFFER_SIZE)
+        is_lobby = key == LOBBY_CHAT_KEY
+        buf = deque(maxlen=LOBBY_BUFFER_SIZE if is_lobby else CHAT_BUFFER_SIZE)
         _buffers[key] = buf
+        # Re-populate the lobby buffer from persisted history on first use so a
+        # freshly (re)started server still shows recent conversation.
+        if is_lobby and not _lobby_hydrated:
+            _lobby_hydrated = True
+            try:
+                from omok_server.services import lobby_chat_store
+                buf.extend(lobby_chat_store.load_recent())
+            except Exception:
+                pass  # missing table / DB hiccup must not break chat
     return buf
+
+
+def _persist_if_lobby(key: str, payload: dict) -> None:
+    """Mirror a lobby message to the DB. Best-effort: never let a persistence
+    failure break the live chat path."""
+    if key != LOBBY_CHAT_KEY:
+        return
+    try:
+        from omok_server.services import lobby_chat_store
+        lobby_chat_store.persist(payload)
+    except Exception:
+        pass
 
 
 def history_for(key: str) -> SChatHistoryMsg | None:
@@ -78,9 +113,18 @@ def clear_buffer(key: str) -> None:
 
 def clear_all_buffers() -> None:
     """Test-only helper."""
+    global _lobby_hydrated
     _buffers.clear()
     _rate_state.clear()
     _mute_state.clear()
+    # Reset persisted lobby history + the one-shot hydration latch so each test
+    # starts from a clean slate (the DB is shared across the test session).
+    _lobby_hydrated = False
+    try:
+        from omok_server.services import lobby_chat_store
+        lobby_chat_store.clear_all()
+    except Exception:
+        pass
 
 
 def drop_channel(key: str) -> None:
@@ -206,6 +250,7 @@ async def handle_incoming_chat(
     ).model_dump()
 
     _key_buffer(key).append(payload)
+    _persist_if_lobby(key, payload)
     await broadcast(payload)
     return ChatResult.OK
 
@@ -226,4 +271,5 @@ async def emit_system_message(
         is_system=True,
     ).model_dump()
     _key_buffer(key).append(payload)
+    _persist_if_lobby(key, payload)
     await broadcast(payload)

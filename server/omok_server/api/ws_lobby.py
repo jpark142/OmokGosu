@@ -21,7 +21,9 @@ from omok_server.ws.registry import registry as ws_registry
 
 router = APIRouter()
 
-_LOBBY_CHAT_KEY = "lobby"
+# Single source of truth for the lobby channel key — chat_helpers gates DB
+# persistence + buffer sizing on this exact value.
+_LOBBY_CHAT_KEY = chat_helpers.LOBBY_CHAT_KEY
 
 
 @dataclass
