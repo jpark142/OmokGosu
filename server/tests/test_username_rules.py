@@ -50,16 +50,11 @@ def test_valid_mixed_under_budget() -> None:
     assert validate_username("가abcd") == "가abcd"
 
 
-def test_jamo_mixed_with_real_char_passes() -> None:
-    # Jamo are fine *within* a name as long as a real char is present.
-    assert validate_username("크크ㅋ") == "크크ㅋ"
-
-
 def test_whitespace_stripped_then_validated() -> None:
     assert validate_username("  나니  ") == "나니"
 
 
-# ----- rejected: jamo-only -----
+# ----- rejected: jamo anywhere -----
 
 def test_jamo_only_consonants_rejected() -> None:
     with pytest.raises(UsernameError, match="자음·모음"):
@@ -67,15 +62,16 @@ def test_jamo_only_consonants_rejected() -> None:
 
 
 def test_jamo_only_vowels_rejected() -> None:
-    # "ㅗㅗ" — vowel-only; also profane, but jamo-only fires first.
     with pytest.raises(UsernameError, match="자음·모음"):
         validate_username("ㅗㅗ")
 
 
-def test_jamo_only_long_rejected() -> None:
-    # Previously accepted at the width edge — now rejected as jamo-only.
+def test_jamo_mixed_with_real_char_rejected() -> None:
+    # Syllable + trailing jamo ("이ㅇ", "크크ㅋ") — jamo is banned anywhere now.
     with pytest.raises(UsernameError, match="자음·모음"):
-        validate_username("ㅋㅋㅋㅋㅋㅋ")
+        validate_username("이ㅇ")
+    with pytest.raises(UsernameError, match="자음·모음"):
+        validate_username("크크ㅋ")
 
 
 # ----- rejected: profanity -----

@@ -12,10 +12,9 @@ type Tab = "login" | "register";
 // then bounce off a 400. Server validates again on receipt.
 const USERNAME_MIN_WIDTH = 4;  // 2 Korean chars or 4 Latin
 const USERNAME_MAX_WIDTH = 12; // 6 Korean chars or 12 Latin
-const USERNAME_ALLOWED_RE = /^[0-9A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ]+$/;
-// A name made up of jamo alone (ㅋㅋ, ㅗㅗ, …) is rejected — jamo are only
-// allowed alongside a real char. Profanity is screened server-side.
-const USERNAME_JAMO_ONLY_RE = /^[ㄱ-ㅎㅏ-ㅣ]+$/;
+// Only complete Hangul syllables, Latin, digits — no bare jamo anywhere
+// (blocks "ㅋㅋ", "이ㅇ", …). Profanity is screened server-side.
+const USERNAME_ALLOWED_RE = /^[0-9A-Za-z가-힣]+$/;
 
 function charWidth(ch: string): number {
   const code = ch.codePointAt(0) ?? 0;
@@ -36,9 +35,7 @@ function usernameError(name: string): string | null {
   const trimmed = name.trim();
   if (trimmed.length === 0) return "닉네임을 입력하세요";
   if (!USERNAME_ALLOWED_RE.test(trimmed))
-    return "닉네임은 한글, 영문, 숫자만 사용할 수 있습니다";
-  if (USERNAME_JAMO_ONLY_RE.test(trimmed))
-    return "자음·모음(ㄱㄴㄷ, ㅏㅑㅓ)만으로는 닉네임을 만들 수 없습니다";
+    return "닉네임은 한글·영문·숫자만 사용할 수 있습니다 (단독 자음·모음 불가)";
   const w = usernameWidth(trimmed);
   if (w < USERNAME_MIN_WIDTH)
     return "닉네임은 한글 2자 (또는 영문·숫자 4자) 이상";
