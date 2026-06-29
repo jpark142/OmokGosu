@@ -27,7 +27,7 @@ export default function RoomCard({ room, currentUserId, onJoin, onEnter, onSpect
 
   return (
     <div
-      className={`bg-white rounded-md border p-4 flex justify-between items-center ${
+      className={`bg-white rounded-md border p-5 h-full min-h-[7rem] flex justify-between items-center ${
         youAreIn ? "border-amber-400 bg-amber-50/50" : "border-stone-200"
       }`}
     >

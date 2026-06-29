@@ -25,6 +25,7 @@ export default function Lobby() {
   const [aiOpen, setAiOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
 
   // Win rate denominator counts only decisive games — draws are listed
   // separately in the strip below but don't influence the percentage.
@@ -108,6 +109,17 @@ export default function Lobby() {
     .filter((r) => q === "" || r.title.toLowerCase().includes(q))
     .sort((a, b) => b.created_at - a.created_at);
 
+  // Client-side pagination: 4 rooms per page in a 2×2 grid. Rooms arrive over
+  // the lobby WS in real time, so totalPages shifts as rooms open/close — we
+  // clamp `page` to the valid range instead of letting it dangle out of bounds.
+  const ROOMS_PER_PAGE = 4;
+  const totalPages = Math.max(1, Math.ceil(visibleRooms.length / ROOMS_PER_PAGE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pagedRooms = visibleRooms.slice(
+    safePage * ROOMS_PER_PAGE,
+    safePage * ROOMS_PER_PAGE + ROOMS_PER_PAGE,
+  );
+
   return (
     <div className="min-h-screen p-4 md:p-6 bg-stone-50">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_18rem] gap-6">
@@ -183,33 +195,60 @@ export default function Lobby() {
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(0);
+            }}
             placeholder="방 제목으로 검색..."
             className="w-full px-3 py-2 border border-stone-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm"
           />
         )}
 
-        {/* Room list */}
-        <div className="space-y-2">
-          {visibleRooms.length === 0 ? (
-            <div className="bg-white rounded-md border border-dashed border-stone-300 p-8 text-center text-stone-500">
-              {rooms.length === 0
-                ? "아직 방이 없습니다. 첫 번째 방을 만들어 보세요."
-                : `'${query}' 와 일치하는 방이 없습니다.`}
+        {/* Room list — 2×2 grid, 4 rooms/page */}
+        {visibleRooms.length === 0 ? (
+          <div className="bg-white rounded-md border border-dashed border-stone-300 p-8 text-center text-stone-500">
+            {rooms.length === 0
+              ? "아직 방이 없습니다. 첫 번째 방을 만들어 보세요."
+              : `'${query}' 와 일치하는 방이 없습니다.`}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {pagedRooms.map((r) => (
+                <RoomCard
+                  key={r.room_id}
+                  room={r}
+                  currentUserId={user?.id}
+                  onJoin={onJoin}
+                  onEnter={onEnter}
+                  onSpectate={onSpectate}
+                />
+              ))}
             </div>
-          ) : (
-            visibleRooms.map((r) => (
-              <RoomCard
-                key={r.room_id}
-                room={r}
-                currentUserId={user?.id}
-                onJoin={onJoin}
-                onEnter={onEnter}
-                onSpectate={onSpectate}
-              />
-            ))
-          )}
-        </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={() => setPage(Math.max(0, safePage - 1))}
+                  disabled={safePage === 0}
+                  className="px-3 py-1.5 text-sm border border-stone-300 rounded text-stone-700 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  ← 이전
+                </button>
+                <span className="text-sm text-stone-500 tabular-nums">
+                  {safePage + 1} / {totalPages} 페이지
+                  <span className="text-stone-400"> · 총 {visibleRooms.length}개</span>
+                </span>
+                <button
+                  onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
+                  disabled={safePage >= totalPages - 1}
+                  className="px-3 py-1.5 text-sm border border-stone-300 rounded text-stone-700 hover:bg-stone-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  다음 →
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Lobby chat — visible to anyone in the lobby */}
         <Chat
