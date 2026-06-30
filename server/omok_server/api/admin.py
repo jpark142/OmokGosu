@@ -2,16 +2,15 @@
 
 Currently exposes usage analytics computed from SessionLog. Gated on the
 operator list (same registry that drives the 운영자 badge) so only official
-accounts can read it. A second auth path — a shared `OMOK_STATS_TOKEN` header —
-lets an unattended job (the daily docs/STATS.md generator) fetch the same data
-without holding a user JWT that would expire.
+accounts can read it. The numbers stay private — the operator dashboard reads
+this with the logged-in operator's JWT and can export a Markdown file
+client-side; nothing is ever committed to the (public) repo.
 """
 from __future__ import annotations
 
-import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from omok_server.auth.deps import _oauth2_scheme
@@ -27,21 +26,12 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 def require_operator(
     token: Annotated[str | None, Depends(_oauth2_scheme)],
-    x_stats_token: Annotated[str | None, Header()] = None,
 ) -> None:
-    """Allow either (a) a logged-in operator's JWT, or (b) a valid shared
-    `OMOK_STATS_TOKEN` header for unattended report generation.
+    """Gate a route to logged-in operator accounts.
 
-    Raises 401 if neither is present/valid, 403 if a valid non-operator token
-    is used. Returns nothing — it's a pure gate.
+    Raises 401 if the token is missing/invalid, 403 if a valid non-operator
+    token is used. Returns nothing — it's a pure gate.
     """
-    # (b) Shared-secret path for the report job. Only honored if the env var is
-    # configured (empty/unset → header path is disabled, no accidental bypass).
-    shared = os.environ.get("OMOK_STATS_TOKEN", "").strip()
-    if shared and x_stats_token and x_stats_token.strip() == shared:
-        return
-
-    # (a) Operator-JWT path.
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

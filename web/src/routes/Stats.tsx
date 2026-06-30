@@ -48,6 +48,49 @@ function pct(rate: number | null): string {
   return rate === null ? "—" : `${Math.round(rate * 100)}%`;
 }
 
+/** Render the same report as a Markdown string for a client-side download.
+ * Kept private (operator-only page, operator JWT) — these numbers are never
+ * committed to the public repo. Mirrors the on-screen tables. */
+function buildMarkdown(s: UsageStats): string {
+  const L: string[] = [];
+  L.push("# 접속 통계 (Usage Stats)", "");
+  L.push(`- 생성 시각(UTC): \`${s.generated_at}\``);
+  L.push(`- 집계 기준: ${s.timezone}`);
+  L.push(`- 데이터 시작: \`${s.data_since ?? "—"}\` · 최신: \`${s.today}\``, "");
+  L.push("## 요약", "", "| 지표 | 값 |", "|---|---|");
+  L.push(`| 누적 유저 | ${s.total_users} |`);
+  L.push(`| 오늘 DAU | ${s.dau_today} |`);
+  L.push(`| WAU (7일) | ${s.wau} |`);
+  L.push(`| MAU (30일) | ${s.mau} |`);
+  L.push(`| 평균 D+1 리텐션 | ${pct(s.overall_d1_rate)} |`);
+  L.push(`| 평균 D+7 리텐션 | ${pct(s.overall_d7_rate)} |`, "");
+  L.push("## 일별 접속", "", "| 날짜 | DAU | 신규 | 누적 | 동접 피크 |", "|---|--:|--:|--:|--:|");
+  for (const r of [...s.daily].reverse()) {
+    const nw = r.new_users > 0 ? `+${r.new_users}` : "—";
+    L.push(`| ${r.day} | ${r.dau} | ${nw} | ${r.cumulative_users} | ${r.peak_concurrent} |`);
+  }
+  L.push("", "## 리텐션 (첫 접속일 코호트별)", "", "| 코호트(첫 접속) | 인원 | D+1 | D+7 |", "|---|--:|--:|--:|");
+  for (const c of [...s.cohorts].reverse()) {
+    const d1 = pct(c.d1_rate) + (c.d1_retained !== null ? ` (${c.d1_retained})` : "");
+    const d7 = pct(c.d7_rate) + (c.d7_retained !== null ? ` (${c.d7_retained})` : "");
+    L.push(`| ${c.cohort_day} | ${c.size} | ${d1} | ${d7} |`);
+  }
+  L.push("");
+  return L.join("\n");
+}
+
+function downloadStats(s: UsageStats): void {
+  const blob = new Blob([buildMarkdown(s)], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `omok-stats-${s.today}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="bg-white rounded-md border border-stone-200 p-4">
@@ -107,7 +150,17 @@ export default function Stats() {
             ← 로비
           </button>
           <h1 className="text-2xl font-bold">접속 통계</h1>
-          <span className="w-12" />
+          {stats ? (
+            <button
+              onClick={() => downloadStats(stats)}
+              className="text-xs text-stone-500 hover:text-stone-900"
+              title="현재 통계를 STATS.md 파일로 저장"
+            >
+              ⬇ STATS.md
+            </button>
+          ) : (
+            <span className="w-16" />
+          )}
         </div>
 
         {error && (
