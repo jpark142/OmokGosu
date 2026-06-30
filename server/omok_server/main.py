@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from omok_server import __version__
+from omok_server.api import admin as admin_api
 from omok_server.api import auth as auth_api
 from omok_server.api import bug_reports as bug_reports_api
 from omok_server.api import downloads as downloads_api
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(system_api.router)
+    app.include_router(admin_api.router)
     app.include_router(auth_api.router)
     app.include_router(bug_reports_api.router)
     app.include_router(downloads_api.router)

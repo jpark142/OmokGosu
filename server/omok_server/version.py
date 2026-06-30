@@ -14,7 +14,7 @@ import re
 from omok_server import __version__ as _PACKAGE_VERSION
 
 SERVER_VERSION: str = _PACKAGE_VERSION
-MIN_CLIENT_VERSION: str = "1.10.0"  # bump together with any MINOR/MAJOR server bump
+MIN_CLIENT_VERSION: str = "1.11.0"  # bump together with any MINOR/MAJOR server bump
 
 _SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 

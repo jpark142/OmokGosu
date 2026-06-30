@@ -1,0 +1,48 @@
+name: Update usage stats
+
+# Regenerates docs/STATS.md from the live /api/admin/stats endpoint once a day
+# and commits it if anything changed. Runs serverless on GitHub's cron, so the
+# report stays current even when no one is deploying. Can also be triggered
+# manually from the Actions tab.
+#
+# Requires repo secret OMOK_STATS_TOKEN (Settings → Secrets and variables →
+# Actions) matching the server's OMOK_STATS_TOKEN Fly secret.
+
+on:
+  schedule:
+    - cron: "10 0 * * *"   # 00:10 UTC daily (= 09:10 KST)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-stats
+  cancel-in-progress: true
+
+jobs:
+  update-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate docs/STATS.md
+        env:
+          OMOK_STATS_TOKEN: ${{ secrets.OMOK_STATS_TOKEN }}
+        run: python scripts/build_stats_report.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- docs/STATS.md; then
+            echo "no change"
+          else
+            git add docs/STATS.md
+            git commit -m "chore(stats): daily usage report update"
+            git push
+          fi

@@ -11,6 +11,7 @@ import { useLobbySocket } from "@/hooks/useLobbySocket";
 import { createGame, createRoom, joinRoom } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { HttpError } from "@/lib/fetcher";
+import { useIsOperator } from "@/lib/operators";
 import type {
   AIDifficulty,
   AILevel,
@@ -20,6 +21,7 @@ import type {
 export default function Lobby() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const isOperator = useIsOperator();
   const { rooms, connected, chat, presence, sendChat } = useLobbySocket();
   const [createOpen, setCreateOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -164,6 +166,15 @@ export default function Lobby() {
               >
                 🏆 랭킹
               </button>
+              {isOperator(user.username) && (
+                <button
+                  onClick={() => navigate("/stats")}
+                  className="text-xs text-stone-500 hover:text-stone-900"
+                  title="접속 통계 (운영자)"
+                >
+                  📊 통계
+                </button>
+              )}
               <button
                 onClick={logout}
                 className="text-xs text-stone-500 hover:text-stone-900"

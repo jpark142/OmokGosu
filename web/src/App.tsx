@@ -16,6 +16,7 @@ import Lobby from "@/routes/Lobby";
 import Login from "@/routes/Login";
 import MatchReplay from "@/routes/MatchReplay";
 import Room from "@/routes/Room";
+import Stats from "@/routes/Stats";
 import UserProfile from "@/routes/UserProfile";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/game/:gameId" element={<Protected><Game /></Protected>} />
           <Route path="/matches/:matchId" element={<Protected><MatchReplay /></Protected>} />
           <Route path="/leaderboard" element={<Protected><Leaderboard /></Protected>} />
+          <Route path="/stats" element={<Protected><Stats /></Protected>} />
           <Route path="/users/:userId" element={<Protected><UserProfile /></Protected>} />
         </Routes>
         <BugReportLauncher />
