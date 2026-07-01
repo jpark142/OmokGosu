@@ -72,6 +72,7 @@ export default function Game() {
   // Confirm-leave modal: set the pending destination URL when the user clicks
   // "← 홈" mid-game. Null means no confirmation in flight.
   const [pendingExit, setPendingExit] = useState<string | null>(null);
+  const [resignConfirm, setResignConfirm] = useState(false);
 
   useEffect(() => {
     const unsub = onMessage((msg) => {
@@ -309,6 +310,14 @@ export default function Game() {
     navigate(dest);
   };
 
+  // Direct "기권" button: don't forfeit on the first click — open a confirm
+  // dialog so a misclick can't lose the game. The dialog's 기권 button calls
+  // onResign; 취소 just closes it.
+  const confirmResign = () => {
+    setResignConfirm(false);
+    onResign();
+  };
+
   const winnerText = useMemo(() => {
     if (!gameOver) return null;
     if (gameOver.reason === "ABORTED") return "무효";
@@ -426,7 +435,7 @@ export default function Game() {
 
                 {!isSpectator && (
                   <button
-                    onClick={onResign}
+                    onClick={() => setResignConfirm(true)}
                     disabled={state.status === "OVER"}
                     className="w-full py-2 border border-red-300 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
                   >
@@ -467,6 +476,31 @@ export default function Game() {
                 className="flex-1 py-2 bg-red-600 text-white rounded hover:bg-red-700"
               >
                 나가기 (기권)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resignConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-30">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full space-y-4">
+            <h2 className="text-lg font-bold">기권하시겠습니까?</h2>
+            <p className="text-sm text-stone-600 leading-relaxed">
+              기권하면 <strong className="text-red-600">상대에게 승리가 기록</strong>됩니다.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setResignConfirm(false)}
+                className="flex-1 py-2 border border-stone-300 rounded text-stone-700 hover:bg-stone-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={confirmResign}
+                className="flex-1 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                기권
               </button>
             </div>
           </div>
