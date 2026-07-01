@@ -1,6 +1,6 @@
 {
   "name": "omokgosu-electron",
-  "version": "1.11.2",
+  "version": "1.12.0",
   "description": "OmokGosu desktop client (thin Electron shell around the web app).",
   "private": true,
   "main": "main.cjs",

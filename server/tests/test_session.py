@@ -59,10 +59,17 @@ def test_apply_move_ends_game_on_black_five() -> None:
     assert gs.over_reason == GameOverReason.FIVE
 
 
-def test_resign_after_first_move_ends_game() -> None:
+def test_resign_after_five_moves_ends_game() -> None:
     gs = GameSession.new()
-    # Place a stone so the game actually started; otherwise resign aborts it.
-    gs.apply_move(7, 7, ColorStr.BLACK)
+    # Play out the opening (>= MIN_MOVES_FOR_RESULT stones) so the resignation
+    # counts as a real result, not an abort. Spread stones out to avoid a five.
+    moves = [
+        (7, 7, ColorStr.BLACK), (0, 0, ColorStr.WHITE),
+        (9, 9, ColorStr.BLACK), (0, 1, ColorStr.WHITE),
+        (11, 11, ColorStr.BLACK),
+    ]
+    for r, c, color in moves:
+        assert gs.apply_move(r, c, color) is None
     gs.resign(ColorStr.WHITE)
     assert gs.status == GameStatus.OVER
     assert gs.winner == ColorStr.BLACK
@@ -74,6 +81,22 @@ def test_resign_at_move_zero_aborts_game() -> None:
     row will still be written but wins/losses/draws stay untouched."""
     gs = GameSession.new()
     gs.resign(ColorStr.BLACK)
+    assert gs.status == GameStatus.OVER
+    assert gs.winner is None
+    assert gs.over_reason == GameOverReason.ABORTED
+
+
+def test_resign_before_five_moves_aborts_game() -> None:
+    """Resigning in the opening (< 5 stones) is a void game: ABORTED, no
+    winner, so it can't dent either player's record."""
+    gs = GameSession.new()
+    moves = [
+        (7, 7, ColorStr.BLACK), (0, 0, ColorStr.WHITE),
+        (9, 9, ColorStr.BLACK),  # 3 stones on the board
+    ]
+    for r, c, color in moves:
+        assert gs.apply_move(r, c, color) is None
+    gs.resign(ColorStr.WHITE)
     assert gs.status == GameStatus.OVER
     assert gs.winner is None
     assert gs.over_reason == GameOverReason.ABORTED

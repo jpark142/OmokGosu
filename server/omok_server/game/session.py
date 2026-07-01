@@ -33,6 +33,13 @@ if TYPE_CHECKING:
     from fastapi import WebSocket
 
 
+# A resignation with fewer than this many stones on the board is treated as an
+# aborted (void) game: no winner, no win/loss impact. Rationale: quitting in the
+# opening is closer to "never really started" than a genuine loss, so it
+# shouldn't dent anyone's record. The game still lands on the history as 무효.
+MIN_MOVES_FOR_RESULT = 5
+
+
 @dataclass
 class _SpectatorEntry:
     """Per-spectator bookkeeping inside a GameSession. We track sockets as a
@@ -281,10 +288,11 @@ class GameSession:
         if self.is_over():
             return
         self.status = GameStatus.OVER
-        # No stones placed yet → treat as aborted: no winner, no stat impact.
-        # The Match row is still written so the participants can see "(무효)"
-        # in their history, but wins/losses/draws stay put.
-        if self.engine.move_number == 0:
+        # Resigning in the opening (< MIN_MOVES_FOR_RESULT stones) → treat as
+        # aborted: no winner, no stat impact. The Match row is still written so
+        # the participants can see "(무효)" in their history, but
+        # wins/losses/draws stay put.
+        if self.engine.move_number < MIN_MOVES_FOR_RESULT:
             self.winner = None
             self.over_reason = GameOverReason.ABORTED
             return

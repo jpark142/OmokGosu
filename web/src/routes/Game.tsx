@@ -38,7 +38,7 @@ const REASON_LABEL: Record<GameOverReason, string> = {
   RESIGN: "기권",
   TIMEOUT: "시간패",
   DRAW: "판 가득 (무승부)",
-  ABORTED: "무효 (대국 시작 전 기권)",
+  ABORTED: "무효 (5수 이전 기권)",
 };
 
 function PlayerLine({ info }: { info: PlayerInfo | undefined }) {
@@ -325,6 +325,11 @@ export default function Game() {
     return gameOver.winner === "BLACK" ? "흑 승" : "백 승";
   }, [gameOver]);
 
+  // Mirror of MIN_MOVES_FOR_RESULT (server/game/session.py): resigning with
+  // fewer than 5 stones on the board voids the game (무효) — no win/loss. Used
+  // to word the confirm dialogs accurately.
+  const willAbortOnResign = !!state && state.move_number < 5;
+
   return (
     <div className="min-h-screen p-4 md:p-8 bg-stone-50">
       <div className="max-w-6xl mx-auto">
@@ -460,10 +465,18 @@ export default function Game() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-30">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full space-y-4">
             <h2 className="text-lg font-bold">게임을 나가시겠어요?</h2>
-            <p className="text-sm text-stone-600 leading-relaxed">
-              지금 나가면 <strong className="text-red-600">기권 처리</strong>되어
-              상대에게 승리가 기록됩니다.
-            </p>
+            {willAbortOnResign ? (
+              <p className="text-sm text-stone-600 leading-relaxed">
+                지금은 5수 이전이라 나가면{" "}
+                <strong className="text-red-600">무효로 처리</strong>됩니다
+                (전적에 반영되지 않음).
+              </p>
+            ) : (
+              <p className="text-sm text-stone-600 leading-relaxed">
+                지금 나가면 <strong className="text-red-600">기권 처리</strong>되어
+                상대에게 승리가 기록됩니다.
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => setPendingExit(null)}
@@ -486,9 +499,17 @@ export default function Game() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-30">
           <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full space-y-4">
             <h2 className="text-lg font-bold">기권하시겠습니까?</h2>
-            <p className="text-sm text-stone-600 leading-relaxed">
-              기권하면 <strong className="text-red-600">상대에게 승리가 기록</strong>됩니다.
-            </p>
+            {willAbortOnResign ? (
+              <p className="text-sm text-stone-600 leading-relaxed">
+                5수 이전에 기권 시{" "}
+                <strong className="text-red-600">무효로 처리</strong>됩니다
+                (전적에 반영되지 않음).
+              </p>
+            ) : (
+              <p className="text-sm text-stone-600 leading-relaxed">
+                기권하면 <strong className="text-red-600">상대에게 승리가 기록</strong>됩니다.
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => setResignConfirm(false)}
